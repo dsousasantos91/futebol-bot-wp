@@ -1,8 +1,12 @@
+const express = require('express');
 const fs = require("fs");
 const { Client, Buttons } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const FILE_PATH = "listas-bot.json";
 require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
@@ -229,3 +233,14 @@ client.on('message', async msg => {
 });
 
 client.initialize();
+
+
+// Rota principal
+app.get('/', (req, res) => {
+    res.send('Bot do WhatsApp está ativo!');
+});
+
+// Iniciar o servidor Express
+app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+});
