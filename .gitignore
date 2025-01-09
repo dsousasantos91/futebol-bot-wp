@@ -61,3 +61,6 @@ yarn.lock
 *.tgz
 *.zip
 *.tar
+
+
+.wwebjs_auth

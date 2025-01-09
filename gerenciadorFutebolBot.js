@@ -1,7 +1,8 @@
 const express = require('express');
 const fs = require("fs");
-const { Client, Buttons } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
+const qrcodet = require('qrcode-terminal');
+const qrcode = require('qrcode');
 const FILE_PATH = "listas-bot.json";
 require('dotenv').config();
 
@@ -9,6 +10,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+let qrCodeData = null;
 
 class FutebolEventManager {
     constructor() {
@@ -157,9 +160,14 @@ class FutebolEventManager {
 
 const gerenciador = new FutebolEventManager();
 
-const client = new Client();
+const client = new Client({
+    authStrategy: new LocalAuth(),
+});
+
 client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
+    qrcodet.generate(qr, { small: true });
+    qrCodeData = qr;
+    console.log('QR RECEIVED', qr);
 });
 
 client.on('ready', () => {
@@ -238,6 +246,17 @@ client.initialize();
 // Rota principal
 app.get('/', (req, res) => {
     res.send('Bot do WhatsApp está ativo!');
+});
+
+app.get(`/qrcode`, (req, res) => {
+    if (!qrCodeData) {
+        return res.send('QR Code ainda não foi gerado.');
+    }
+
+    qrcode.toDataURL(qrCodeData, (err, url) => {
+        if (err) return res.send('Erro ao gerar QR Code.');
+        res.send(`<img src="${url}" />`);
+    });
 });
 
 // Iniciar o servidor Express
