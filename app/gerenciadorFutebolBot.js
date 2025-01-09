@@ -3,7 +3,7 @@ const fs = require("fs");
 const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
 const qrcodet = require('qrcode-terminal');
 const qrcode = require('qrcode');
-const FILE_PATH = "listas-bot.json";
+const FILE_PATH = "../listas-bot.json";
 require('dotenv').config();
 
 const app = express();
