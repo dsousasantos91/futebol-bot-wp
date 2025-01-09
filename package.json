@@ -6,6 +6,6 @@
         "whatsapp-web.js": ""
     },
     "scripts": {
-        "start": "node gerenciadorFutebol.js"
+        "start": "node gerenciadorFutebolBot.js"
     }
 }
