@@ -1,1 +1,1 @@
-web: node gerenciadorFutebolBot.js
+web: npm start
