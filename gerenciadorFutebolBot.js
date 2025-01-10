@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 3000;
 const ADMINS = process.env.ADMINS.split(',');
 const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
+const GRUPO = process.env.GRUPO
 
 let listaAberta = true;
 
@@ -247,6 +248,45 @@ client.on('qr', qr => {
 
 client.on('ready', () => {
     console.log('Tudo certo! WhatsApp conectado.');
+
+    // Agendando a abertura da lista para segundas-feiras às 12h
+    schedule.scheduleJob(ABRIR, async () => {
+        const message = '⚠️ *ATENÇÃO* ⚠️\n' + 
+        '\nEstá *ABERTA* a inscrição de jogadores da ' + GRUPO +
+        '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
+        '\n*/add* _(Para adicionar na lista principal ou espera)_\n' +
+        '\n*/rm* _(Para remover da lista principal ou espera)_\n' +
+        '\n*/addgol* _(Para adicionar na lista de goleiros)_\n' +
+        '\n*/rmgol* _(Para remover da lista de goleiros)_\n'
+        ;
+
+        const chat = await findGroupByName(GRUPO);
+        if (chat) {
+            listaAberta = true;
+            chat.sendMessage(message);
+            console.log(`Mensagem enviada para o grupo: ${GRUPO}`);
+        } else {
+            console.log(`Grupo com o nome "${GRUPO}" não foi encontrado.`);
+        }
+    });
+
+    // Agendando o fechamento da lista para quintas-feiras às 17h
+    schedule.scheduleJob(FECHAR, async () => {
+        const message = '⚠️ *ATENÇÃO* ⚠️\n' + 
+        '\nA lista de jogadores está *FECHADA*. Caso desista, entre em contato com um administrador.\n' + 
+        '\n*Lembre-se:* desistências resultam em suspensão na pelada da próxima semana.';
+
+        const chat = await findGroupByName(GRUPO);
+        if (chat) {
+            listaAberta = false;
+            chat.sendMessage(message);
+            console.log(`Mensagem enviada para o grupo: ${GRUPO}`);
+        } else {
+            console.log(`Grupo com o nome "${GRUPO}" não foi encontrado.`);
+        }
+    });
+
+    console.log('Scheduler configurado com as mensagens para os grupos.');
 });
 
 client.on('message', async msg => {
@@ -370,13 +410,12 @@ client.on('message', async msg => {
     }
 });
 
+async function findGroupByName(name) {
+    const chats = await client.getChats();
+    return chats.find(chat => chat.name === name);
+}
+
 client.initialize();
-
-// Agendando a abertura da lista para segundas-feiras às 12h
-schedule.scheduleJob(ABRIR, gerenciador.abrirLista);
-
-// Agendando o fechamento da lista para quintas-feiras às 17h
-schedule.scheduleJob(FECHAR, gerenciador.fecharLista);
 
 // Rota principal
 app.get('/', (req, res) => {
