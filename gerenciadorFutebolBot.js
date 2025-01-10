@@ -10,6 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const ADMINS = process.env.ADMINS.split(',');
+const JOGADORES_FIXOS = process.env.JOGADORES_FIXOS.split(',');
 const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
 const GRUPO = process.env.GRUPO
@@ -174,12 +175,13 @@ class FutebolEventManager {
 
     limparListas() {
         this.listaGoleiros = Array(3).fill(null);
-        this.listaPrincipal = Array(15).fill(null);
+        this.listaPrincipal = [...JOGADORES_FIXOS, ...Array(15 - JOGADORES_FIXOS.length).fill(null)];
         this.listaEspera = [];
         if (fs.existsSync(FILE_PATH)) {
             fs.unlinkSync(FILE_PATH); // Remove o arquivo
         }
         console.log("\nListas foram limpas.");
+        this.salvarListasNoArquivo();
         this.exibirListas();
     }
 
@@ -254,15 +256,17 @@ client.on('ready', () => {
         const message = '⚠️ *ATENÇÃO* ⚠️\n' + 
         '\nEstá *ABERTA* a inscrição de jogadores da ' + GRUPO +
         '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
-        '\n*/add* _(Para adicionar na lista principal ou espera)_\n' +
-        '\n*/rm* _(Para remover da lista principal ou espera)_\n' +
-        '\n*/addgol* _(Para adicionar na lista de goleiros)_\n' +
-        '\n*/rmgol* _(Para remover da lista de goleiros)_\n'
+        '\n- */add* _(Para adicionar na lista principal ou espera)_' +
+        '\n- */rm* _(Para remover da lista principal ou espera)_' +
+        '\n- */addgol* _(Para adicionar na lista de goleiros)_' +
+        '\n- */rmgol* _(Para remover da lista de goleiros)_'
         ;
 
         const chat = await findGroupByName(GRUPO);
         if (chat) {
             listaAberta = true;
+            gerenciador.limparListas();
+            chat.sendMessage(gerenciador.exibirListas());
             chat.sendMessage(message);
             console.log(`Mensagem enviada para o grupo: ${GRUPO}`);
         } else {
