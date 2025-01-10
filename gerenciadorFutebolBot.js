@@ -1,9 +1,8 @@
 const express = require('express');
 const fs = require("fs");
 const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
-const qrcodet = require('qrcode-terminal');
-const qrcode123456 = require('qrcode');
-const FILE_PATH = "../listas-bot.json";
+const qrcode = require('qrcode-terminal');
+const FILE_PATH = "listas-bot.json";
 require('dotenv').config();
 
 const app = express();
@@ -179,7 +178,7 @@ const client = new Client({
 });
 
 client.on('qr', qr => {
-    qrcodet.generate(qr, { small: true });
+    qrcode.generate(qr, { small: true });
     qrCodeData = qr;
     console.log('QR RECEIVED', qr);
 });
