@@ -1,4 +1,5 @@
 const express = require('express');
+const schedule = require('node-schedule');
 const fs = require("fs");
 const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
@@ -9,8 +10,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const ADMINS = process.env.ADMINS.split(',');
+const ABRIR = process.env.ABRIR;
+const FECHAR = process.env.FECHAR;
 
-let qrCodeData = null;
+let listaAberta = true;
 
 class FutebolEventManager {
     constructor() {
@@ -207,6 +210,14 @@ class FutebolEventManager {
 
         return mensagem;
     }
+
+    abrirLista() {
+        listaAberta = true;
+    }
+
+    fecharLista() {
+        listaAberta = false;
+    }
 }
 
 const gerenciador = new FutebolEventManager();
@@ -231,7 +242,6 @@ const client = new Client({
 
 client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
-    qrCodeData = qr;
     console.log('QR RECEIVED', qr);
 });
 
@@ -248,6 +258,13 @@ client.on('message', async msg => {
     const numero = msg.author ? msg.author.split('@')[0] : msg.from.split('@')[0];
     const nomeUsuario = contato.pushname || contato.name || `@${numero}`;
 
+    const comandosListas = [
+        "/add",
+        "/rm",
+        "/addgol",
+        "/rmgol"
+    ];
+
     const comandosAdmins = [
         "/addlista",
         "/rmp",
@@ -256,6 +273,11 @@ client.on('message', async msg => {
         "/sortear",
         "/pg"
     ];
+
+    if (comandosListas.includes(comando) && !listaAberta) {
+        msg.reply("Lista fechada. Entre em contato com um administrador do grupo.");
+        return;
+    }
 
     if (comandosAdmins.includes(comando) && !ADMINS.includes(numero)) {
         msg.reply("Apenas administradores podem executar o comando enviado.");
@@ -349,6 +371,12 @@ client.on('message', async msg => {
 });
 
 client.initialize();
+
+// Agendando a abertura da lista para segundas-feiras às 12h
+schedule.scheduleJob(ABRIR, gerenciador.abrirLista);
+
+// Agendando o fechamento da lista para quintas-feiras às 17h
+schedule.scheduleJob(FECHAR, gerenciador.fecharLista);
 
 // Rota principal
 app.get('/', (req, res) => {
