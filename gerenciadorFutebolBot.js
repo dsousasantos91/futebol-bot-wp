@@ -8,7 +8,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMINS = process.env.ADMINS.split(',');
 
 let qrCodeData = null;
 
@@ -67,17 +67,16 @@ class FutebolEventManager {
 
     adicionarJogador(nome, isGoleiro = false) {
 
-        if (this.listaPrincipal.includes(nome) || this.listaEspera.includes(nome)) {
+        if (!isGoleiro && (this.listaPrincipal.includes(nome) || this.listaEspera.includes(nome))) {
             return `\nO jogador "${nome}" já está registrado em uma das listas.`;
         }
 
         if (isGoleiro) {
             const posicaoGoleiro = this.listaGoleiros.indexOf(null);
-            if (posicaoGoleiro !== -1) {
-                this.listaGoleiros[posicaoGoleiro] = nome;
-            } else {
+            if (posicaoGoleiro === -1) {
                 return "\nNão há espaço disponível para novos goleiros.";
             }
+            this.listaGoleiros[posicaoGoleiro] = nome;
         } else {
             const posicaoPrincipal = this.listaPrincipal.indexOf(null);
             if (posicaoPrincipal !== -1) {
@@ -86,27 +85,80 @@ class FutebolEventManager {
                 this.listaEspera.push(nome);
             }
         }
+
         this.salvarListasNoArquivo();
         return this.exibirListas();
     }
 
-    removerJogador(nome) {
+    removerJogador(nome, isGoleiro = false) {
         const indexPrincipal = this.listaPrincipal.indexOf(nome);
         const indexGoleiros = this.listaGoleiros.indexOf(nome);
         const indexEspera = this.listaEspera.indexOf(nome);
 
-        if (indexGoleiros !== -1) {
+        if(indexGoleiros === -1 && indexPrincipal === -1 && indexEspera === -1) {
+            return "\nJogador não encontrado na lista.";
+        }
+
+        if (indexGoleiros !== -1 && isGoleiro) {
             this.listaGoleiros[indexGoleiros] = null;
-        } else if (indexPrincipal !== -1) {
+        } 
+        
+        if (indexPrincipal !== -1) {
             this.listaPrincipal[indexPrincipal] = null;
             if (this.listaEspera.length > 0) {
-                this.listaPrincipal[indexPrincipal] = this.listaEspera.shift();
+                this.listaPrincipal[indexPrincipal] = this.listaEspera.splice(0, 1);
             }
         } else if (indexEspera !== -1) {
             this.listaEspera.splice(indexEspera, 1);
+        } 
+
+        this.salvarListasNoArquivo();
+        return this.exibirListas();
+    }
+
+    removerJogadorPosicao(posicao, isGoleiro = false) {
+        if (isGoleiro) {
+            if (posicao < 1 || posicao > 3) {
+                return "\nPosição inválida. Escolha uma posição entre 1 e 3.";
+            }
+            const index = posicao - 1;
+            if (this.listaGoleiros[index] === null) {
+                return "\nNão há goleiro nesta posição para remover.";
+            }
+            this.listaGoleiros[index] = null;
         } else {
-            return "\nJogador não encontrado na lista.";
+            if (posicao < 1 || posicao > 15) {
+                return "\nPosição inválida. Escolha uma posição entre 1 e 15.";
+            }
+
+            const index = posicao - 1;
+            if (this.listaPrincipal[index] === null) {
+                return "\nNão há jogador nesta posição para remover.";
+            }
+
+            this.listaPrincipal[index] = null;
+            if (this.listaEspera.length > 0) {
+                this.listaPrincipal[index] = this.listaEspera.splice(0, 1);
+            }
         }
+
+        this.salvarListasNoArquivo();
+        return this.exibirListas();
+    }
+
+    informarPagamento(posicao, tipoPagamento) {
+        if (posicao < 1 || posicao > 15) {
+            return "\nPosição inválida. Escolha uma posição entre 1 e 15.";
+        }
+
+        const index = posicao - 1;
+        if (this.listaPrincipal[index] === null) {
+            return "\nNão há jogador nesta posição para remover.";
+        }
+
+        const tipos = { pix: '🔄', dinheiro: '💵', cartao: '💳' };
+
+        this.listaPrincipal[index] += ' => ' + tipos[tipoPagamento];
 
         this.salvarListasNoArquivo();
         return this.exibirListas();
@@ -196,6 +248,20 @@ client.on('message', async msg => {
     const numero = msg.author ? msg.author.split('@')[0] : msg.from.split('@')[0];
     const nomeUsuario = contato.pushname || contato.name || `@${numero}`;
 
+    const comandosAdmins = [
+        "/addlista",
+        "/rmp",
+        "/rmpgol",
+        "/limpar",
+        "/sortear",
+        "/pg"
+    ];
+
+    if (comandosAdmins.includes(comando) && !ADMINS.includes(numero)) {
+        msg.reply("Apenas administradores podem executar o comando enviado.");
+        return;
+    }
+
     if(comando === "/add") {
         const respostaAdd = gerenciador.adicionarJogador(`${nomeUsuario} (${numero})`);
         msg.reply(respostaAdd);
@@ -203,32 +269,62 @@ client.on('message', async msg => {
     }
         
 
-    if(comando === "/remover") {
+    if(comando === "/rm") {
         const respostaRemover = gerenciador.removerJogador(`${nomeUsuario} (${numero})`);
         msg.reply(respostaRemover);
         return;
     }
-        
 
-    if(comando === "/addlista") {
-        const senhaAddLista = args.shift();
-        if (senhaAddLista !== ADMIN_PASSWORD) {
-            msg.reply("Senha incorreta. Ação não autorizada.");
+    if(comando === "/addgol") {
+        const respostaAdd = gerenciador.adicionarJogador(`${nomeUsuario} (${numero})`, true);
+        msg.reply(respostaAdd);
+        return;
+    }
+        
+    if(comando === "/rmgol") {
+        const respostaRemover = gerenciador.removerJogador(`${nomeUsuario} (${numero})`, true);
+        msg.reply(respostaRemover);
+        return;
+    }
+
+    if(comando === "/ver") {
+        const listas = gerenciador.exibirListas();
+        if (listas.length < 1) {
+            msg.reply("Lista vazia.\nNenhuma jogador add.")
             return;
         }
+        msg.reply(listas);
+        return;
+    }
+
+    if(comando === "/addlista") {
         const lista = args.join(' ').split(',').map(nome => nome.trim());
         gerenciador.adicionarListaCompleta(lista);
         msg.reply(gerenciador.exibirListas());
         return;
     }
 
-
-    if(comando === "/limpar") {
-        const senhaLimpar = args[0];
-        if (senhaLimpar !== ADMIN_PASSWORD) {
-            msg.reply("Senha incorreta. Ação não autorizada.");
+    if(comando === "/rmp") {
+        if (!args[0]) {
+            msg.reply("Posição não informada. *Exemplo: /rmp 1*");
             return;
         }
+        const respostaRemover = gerenciador.removerJogadorPosicao(parseInt(args[0]));
+        msg.reply(respostaRemover);
+        return;
+    }
+
+    if(comando === "/rmpgol") {
+        if (!args[0]) {
+            msg.reply("Posição não informada. *Exemplo: /rmpgol 1*");
+            return;
+        }
+        const respostaRemover = gerenciador.removerJogadorPosicao(parseInt(args[0]), true);
+        msg.reply(respostaRemover);
+        return;
+    }
+
+    if(comando === "/limpar") {
         gerenciador.limparListas();
         msg.reply("Limpeza da lista realizada com sucesso!!!");
         return;
@@ -241,14 +337,13 @@ client.on('message', async msg => {
         return;
     }
 
-
-    if(comando === "/ver") {
-        const listas = gerenciador.exibirListas();
-        if (listas.length < 1) {
-            msg.reply("Lista vazia.\nNenhuma jogador add.")
+    if(comando === "/pg") {
+        if (!args[0] || !args[1]) {
+            msg.reply("Posição ou tipo de pagamento não informada. *Exemplo: /pg 1 pix*");
             return;
         }
-        msg.reply(listas);
+        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), args[1]);
+        msg.reply(respostaPagamento);
         return;
     }
 });
