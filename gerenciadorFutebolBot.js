@@ -15,7 +15,7 @@ const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
 const GRUPO = process.env.GRUPO
 
-let listaAberta = true;
+let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
 
 class FutebolEventManager {
     constructor() {
