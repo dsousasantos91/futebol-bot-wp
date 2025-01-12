@@ -264,7 +264,7 @@ client.on('ready', () => {
 
         const chat = await findGroupByName(GRUPO);
         if (chat) {
-            listaAberta = true;
+            gerenciador.abrirLista();
             gerenciador.limparListas();
             chat.sendMessage(gerenciador.exibirListas());
             chat.sendMessage(message);
@@ -282,7 +282,7 @@ client.on('ready', () => {
 
         const chat = await findGroupByName(GRUPO);
         if (chat) {
-            listaAberta = false;
+            gerenciador.fecharLista();
             chat.sendMessage(message);
             console.log(`Mensagem enviada para o grupo: ${GRUPO}`);
         } else {
