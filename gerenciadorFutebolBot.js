@@ -17,6 +17,7 @@ const FECHAR = process.env.FECHAR;
 const GRUPO = process.env.GRUPO
 
 let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
+let qrCodeData = null;
 
 class FutebolEventManager {
     constructor() {
@@ -250,6 +251,7 @@ const client = new Client({
 
 client.on('qr', qr => {
     qrcode.generate(qr, { small: true });
+    qrCodeData = qr;
     console.log('QR RECEIVED', qr);
 });
 
