@@ -52,20 +52,24 @@ class FutebolEventManager {
 
     exibirListas() {
         let mensagem = "\nLista Pelada\nQuinta 21:40\n";
-        mensagem += "\nGoleiros:\n";
+        mensagem += "\n*🥅 Goleiros:*\n";
         this.listaGoleiros.forEach((goleiro, index) => {
-            mensagem += `${index + 1} - 🥅 ${goleiro || ""}\n`;
+            mensagem += `${index + 1} - ${goleiro || ""}\n`;
         });
 
-        mensagem += "\nJogadores:\n";
+        mensagem += "\n*📋 Jogadores:*\n";
         this.listaPrincipal.forEach((jogador, index) => {
             mensagem += `${index + 1} - ${jogador || ""}\n`;
         });
 
-        mensagem += "\nLista de espera\n";
-        this.listaEspera.forEach((jogador, index) => {
-            mensagem += `${index + 1} - ${jogador}\n`;
-        });
+        mensagem += "\n*⏳ Lista de espera*\n";
+        if (this.listaEspera.length) {
+            this.listaEspera.forEach((jogador, index) => {
+                mensagem += `${index + 1} - ${jogador}\n`;
+            });
+        } else {
+            mensagem += '_A lista de espera está vazia._'
+        }
 
         return mensagem;
     }
@@ -315,7 +319,8 @@ client.on('message', async msg => {
         "/rmpgol",
         "/limpar",
         "/sortear",
-        "/pg"
+        "/pg",
+        "/ver"
     ];
 
     if (comandosListas.includes(comando) && !listaAberta) {
