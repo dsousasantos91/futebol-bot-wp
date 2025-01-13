@@ -3,6 +3,7 @@ const schedule = require('node-schedule');
 const fs = require("fs");
 const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const qrcodeBrowser = require('qrcode');
 const FILE_PATH = "listas-bot.json";
 require('dotenv').config();
 
@@ -429,6 +430,18 @@ client.initialize();
 // Rota principal
 app.get('/', (req, res) => {
     res.send('Bot do WhatsApp está ativo!');
+});
+
+
+app.get(`/qrcode`, (req, res) => {
+    if (!qrCodeData) {
+        return res.send('QR Code ainda não foi gerado.');
+    }
+
+    qrcodeBrowser.toDataURL(qrCodeData, (err, url) => {
+        if (err) return res.send('Erro ao gerar QR Code.');
+        res.send(`<img src="${url}" />`);
+    });
 });
 
 // Iniciar o servidor Express
