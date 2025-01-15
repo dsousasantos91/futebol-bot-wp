@@ -192,7 +192,8 @@ class FutebolEventManager {
         if (indexPrincipal !== -1) {
             this.listaPrincipal[indexPrincipal] = null;
             if (this.listaEspera.length > 0) {
-                this.listaPrincipal[indexPrincipal] = this.listaEspera.splice(0, 1);
+                this.listaPrincipal[indexPrincipal] = this.listaEspera[0];
+                this.listaEspera.splice(0, 1);
             }
         } else if (indexEspera !== -1) {
             this.listaEspera.splice(indexEspera, 1);
@@ -224,7 +225,8 @@ class FutebolEventManager {
 
             this.listaPrincipal[index] = null;
             if (this.listaEspera.length > 0) {
-                this.listaPrincipal[index] = this.listaEspera.splice(0, 1);
+                this.listaPrincipal[index] = this.listaEspera[0];
+                this.listaEspera.splice(0, 1);
             }
         }
 
