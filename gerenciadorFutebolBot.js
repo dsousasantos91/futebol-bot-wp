@@ -385,17 +385,15 @@ client.on('message', async msg => {
     }
 
     if(comando === "/addlista") {
-        if (!args[0]) {
-            msg.reply("Informar a lista: \n- *g* (goleiros)\n- *p* (principal)");
-            return;
-        }
         const lista = args.join(' ').split(',').map(nome => nome.trim());
-        if (args[0] === 'g') {
-            gerenciador.adicionarListaCompleta(lista, true);
-        } else {
-            gerenciador.adicionarListaCompleta(lista);
-        }
-        
+        gerenciador.adicionarListaCompleta(lista);
+        msg.reply(gerenciador.exibirListas());
+        return;
+    }
+
+    if(comando === "/addlistag") {
+        const lista = args.join(' ').split(',').map(nome => nome.trim());
+        gerenciador.adicionarListaCompleta(lista, true);
         msg.reply(gerenciador.exibirListas());
         return;
     }
