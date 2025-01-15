@@ -1,5 +1,6 @@
 const express = require('express');
 const schedule = require('node-schedule');
+const { google } = require("googleapis");
 const fs = require("fs");
 const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
@@ -15,42 +16,114 @@ const JOGADORES_FIXOS = process.env.JOGADORES_FIXOS.split(',');
 const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
 const GRUPO = process.env.GRUPO
+const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const SCOPES = process.env.GOOGLE_SHEET_SCOPES || "https://www.googleapis.com/auth/spreadsheets";
 
 let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
 let qrCodeData = null;
 
 class FutebolEventManager {
-    constructor() {
-        const data = this.carregarListasDoArquivo();
-        this.listaGoleiros = data.listaGoleiros || Array(3).fill(null);
-        this.listaPrincipal = data.listaPrincipal || Array(15).fill(null);
+    constructor() { }
+
+    async init() {
+        const data = await this.carregarListasDaPlanilha();
+        this.listaGoleiros = [...data.listaGoleiros, ...Array(3 - data.listaGoleiros.length).fill(null)];
+        this.listaPrincipal = [...data.listaPrincipal, ...Array(15 - data.listaPrincipal.length).fill(null)];
         this.listaEspera = data.listaEspera || [];
     }
 
-    carregarListasDoArquivo() {
+    async carregarListasDaPlanilha() {
         try {
-            if (fs.existsSync(FILE_PATH)) {
-                const data = fs.readFileSync(FILE_PATH, "utf8");
-                return JSON.parse(data);
+            // Carregar credenciais
+            const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+            const auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: [SCOPES],
+            });
+    
+            const sheets = google.sheets({ version: "v4", auth });
+    
+            // Inicializa as listas com valores padrão
+            const data = {
+                listaGoleiros: Array(3).fill(null),
+                listaPrincipal: Array(15).fill(null),
+                listaEspera: [],
+            };
+    
+            // Tenta carregar os dados de cada aba
+            for (const key of Object.keys(data)) {
+                try {
+                    const response = await sheets.spreadsheets.values.get({
+                        spreadsheetId: SHEET_ID,
+                        range: `${key}!A2:A`, // Ignora a primeira linha (cabeçalho)
+                    });
+    
+                    const values = response.data.values || [];
+                    data[key] = values.map(row => row[0]); // Extrai o valor de cada linha
+                } catch (error) {
+                    console.warn(`Erro ao carregar a aba ${key}:`, error.message);
+                }
             }
+    
+            return data;
         } catch (error) {
-            console.error("Erro ao carregar listas do arquivo:", error);
+            console.error("Erro ao carregar listas da planilha:", error);
+            return { listaGoleiros: Array(3).fill(null), listaPrincipal: Array(15).fill(null), listaEspera: [] };
         }
-        return { listaGoleiros: Array(3).fill(null), listaPrincipal: Array(15).fill(null), listaEspera: [] };
+    }    
+
+    async salvarListasNaPlanilha() {
+        try {
+            // Carregar credenciais
+            const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+            const auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: [SCOPES],
+            });
+
+            const sheets = google.sheets({ version: "v4", auth });
+
+            const data = {
+                listaGoleiros: this.listaGoleiros || [],
+                listaPrincipal: this.listaPrincipal || [],
+                listaEspera: this.listaEspera || []
+            };
+
+            // Limpar dados existentes nas abas correspondentes
+            for (const key of Object.keys(data)) {
+                const range = `${key}!A1:Z1000`; // Ajuste o intervalo conforme necessário
+                await sheets.spreadsheets.values.clear({
+                    spreadsheetId: SHEET_ID,
+                    range,
+                });
+            }
+
+            // Preparar dados para escrita
+            const requests = Object.keys(data).map((key) => {
+                const values = data[key].map(item => [item]); // Converte os dados em matriz
+                return {
+                    range: `${key}!A1`, // Cada chave corresponde ao nome de uma aba
+                    values: [["Jogadores"], ...values], // Adiciona um cabeçalho
+                };
+            });
+
+            // Escrever novos dados
+            for (const { range, values } of requests) {
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SHEET_ID,
+                    range,
+                    valueInputOption: "RAW",
+                    requestBody: { values },
+                });
+            }
+
+            console.log("Listas salvas no Google Sheets com sucesso!");
+        } catch (error) {
+            console.error("Erro ao salvar listas no Google Sheets:", error);
+        }
     }
 
-    salvarListasNoArquivo() {
-        try {
-            const data = {
-                listaGoleiros: this.listaGoleiros,
-                listaPrincipal: this.listaPrincipal,
-                listaEspera: this.listaEspera
-            };
-            fs.writeFileSync(FILE_PATH, JSON.stringify(data, null, 2), "utf8");
-        } catch (error) {
-            console.error("Erro ao salvar listas no arquivo:", error);
-        }
-    }
+    
 
     exibirListas() {
         let mensagem = "\nLista Pelada\nQuinta 21:40\n";
@@ -76,8 +149,7 @@ class FutebolEventManager {
         return mensagem;
     }
 
-    adicionarJogador(nome, isGoleiro = false) {
-
+    adicionar(nome, isGoleiro = false) {
         if (!isGoleiro && (this.listaPrincipal.includes(nome) || this.listaEspera.includes(nome))) {
             return `\nO jogador "${nome}" já está registrado em uma das listas.`;
         }
@@ -96,8 +168,11 @@ class FutebolEventManager {
                 this.listaEspera.push(nome);
             }
         }
+    }
 
-        this.salvarListasNoArquivo();
+    adicionarJogador(nome, isGoleiro = false) {
+        this.adicionar(nome, isGoleiro);
+        this.salvarListasNaPlanilha();
         return this.exibirListas();
     }
 
@@ -123,7 +198,7 @@ class FutebolEventManager {
             this.listaEspera.splice(indexEspera, 1);
         } 
 
-        this.salvarListasNoArquivo();
+        this.salvarListasNaPlanilha();
         return this.exibirListas();
     }
 
@@ -153,7 +228,7 @@ class FutebolEventManager {
             }
         }
 
-        this.salvarListasNoArquivo();
+        this.salvarListasNaPlanilha();
         return this.exibirListas();
     }
 
@@ -171,23 +246,22 @@ class FutebolEventManager {
 
         this.listaPrincipal[index] += ' => ' + tipos[tipoPagamento];
 
-        this.salvarListasNoArquivo();
+        this.salvarListasNaPlanilha();
         return this.exibirListas();
     }
 
     adicionarListaCompleta(nomes, isGoleiros = false) {
-        nomes.forEach(nome => this.adicionarJogador(nome, isGoleiros));
+        nomes.forEach(nome => this.adicionar(nome, isGoleiros));
+        this.salvarListasNaPlanilha();
+        return this.exibirListas();
     }
 
     limparListas() {
         this.listaGoleiros = Array(3).fill(null);
         this.listaPrincipal = Array(15).fill(null);
         this.listaEspera = [];
-        if (fs.existsSync(FILE_PATH)) {
-            fs.unlinkSync(FILE_PATH); // Remove o arquivo
-        }
         console.log("\nListas foram limpas.");
-        this.salvarListasNoArquivo();
+        this.salvarListasNaPlanilha();
         this.exibirListas();
     }
 
@@ -195,11 +269,8 @@ class FutebolEventManager {
         this.listaGoleiros = Array(3).fill(null);
         this.listaPrincipal = [...JOGADORES_FIXOS, ...Array(15 - JOGADORES_FIXOS.length).fill(null)];
         this.listaEspera = [];
-        if (fs.existsSync(FILE_PATH)) {
-            fs.unlinkSync(FILE_PATH); // Remove o arquivo
-        }
         console.log("\nListas foram reiniciadas.");
-        this.salvarListasNoArquivo();
+        this.salvarListasNaPlanilha();
         this.exibirListas();
     }
 
@@ -242,6 +313,7 @@ class FutebolEventManager {
 }
 
 const gerenciador = new FutebolEventManager();
+gerenciador.init();
 
 const client = new Client({
     authStrategy: new LocalAuth(),
