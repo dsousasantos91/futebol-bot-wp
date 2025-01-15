@@ -427,7 +427,7 @@ client.on('message', async msg => {
     }
 
     if(comando === "/reiniciar") {
-        gerenciador.limparListas();
+        gerenciador.reiniciarListas();
         msg.reply("Listas reiniciadas com sucesso!!!");
         return;
     }
