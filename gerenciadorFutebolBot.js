@@ -181,12 +181,24 @@ class FutebolEventManager {
 
     limparListas() {
         this.listaGoleiros = Array(3).fill(null);
-        this.listaPrincipal = [...JOGADORES_FIXOS, ...Array(15 - JOGADORES_FIXOS.length).fill(null)];
+        this.listaPrincipal = Array(15).fill(null);
         this.listaEspera = [];
         if (fs.existsSync(FILE_PATH)) {
             fs.unlinkSync(FILE_PATH); // Remove o arquivo
         }
         console.log("\nListas foram limpas.");
+        this.salvarListasNoArquivo();
+        this.exibirListas();
+    }
+
+    reiniciarListas() {
+        this.listaGoleiros = Array(3).fill(null);
+        this.listaPrincipal = [...JOGADORES_FIXOS, ...Array(15 - JOGADORES_FIXOS.length).fill(null)];
+        this.listaEspera = [];
+        if (fs.existsSync(FILE_PATH)) {
+            fs.unlinkSync(FILE_PATH); // Remove o arquivo
+        }
+        console.log("\nListas foram reiniciadas.");
         this.salvarListasNoArquivo();
         this.exibirListas();
     }
@@ -272,7 +284,7 @@ client.on('ready', () => {
         const chat = await findGroupByName(GRUPO);
         if (chat) {
             gerenciador.abrirLista();
-            gerenciador.limparListas();
+            gerenciador.reiniciarListas();
             chat.sendMessage(gerenciador.exibirListas());
             chat.sendMessage(message);
             console.log(`Mensagem enviada para o grupo: ${GRUPO}`);
@@ -321,6 +333,7 @@ client.on('message', async msg => {
         "/rmp",
         "/rmpgol",
         "/limpar",
+        "/reiniciar",
         "/sortear",
         "/pg",
         "/ver"
@@ -372,8 +385,17 @@ client.on('message', async msg => {
     }
 
     if(comando === "/addlista") {
+        if (!args[0]) {
+            msg.reply("Informar a lista: \n- *g* (goleiros)\n- *p* (principal)");
+            return;
+        }
         const lista = args.join(' ').split(',').map(nome => nome.trim());
-        gerenciador.adicionarListaCompleta(lista);
+        if (args[0] === 'g') {
+            gerenciador.adicionarListaCompleta(lista, true);
+        } else {
+            gerenciador.adicionarListaCompleta(lista);
+        }
+        
         msg.reply(gerenciador.exibirListas());
         return;
     }
@@ -401,6 +423,12 @@ client.on('message', async msg => {
     if(comando === "/limpar") {
         gerenciador.limparListas();
         msg.reply("Limpeza da lista realizada com sucesso!!!");
+        return;
+    }
+
+    if(comando === "/reiniciar") {
+        gerenciador.limparListas();
+        msg.reply("Listas reiniciadas com sucesso!!!");
         return;
     }
 
