@@ -22,6 +22,13 @@ const SCOPES = process.env.GOOGLE_SHEET_SCOPES || "https://www.googleapis.com/au
 let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
 let qrCodeData = null;
 
+const orientacoes = '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
+'\n- */add* _(Para adicionar na lista principal ou espera)_' +
+'\n- */rm* _(Para remover da lista principal ou espera)_' +
+'\n- */addgol* _(Para adicionar na lista de goleiros)_' +
+'\n- */rmgol* _(Para remover da lista de goleiros)_'
+;
+
 class FutebolEventManager {
     constructor() { }
 
@@ -347,13 +354,7 @@ client.on('ready', () => {
     // Agendando a abertura da lista para segundas-feiras às 12h
     schedule.scheduleJob(ABRIR, async () => {
         const message = '⚠️ *ATENÇÃO* ⚠️\n' + 
-        '\nEstá *ABERTA* a inscrição de jogadores da ' + GRUPO +
-        '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
-        '\n- */add* _(Para adicionar na lista principal ou espera)_' +
-        '\n- */rm* _(Para remover da lista principal ou espera)_' +
-        '\n- */addgol* _(Para adicionar na lista de goleiros)_' +
-        '\n- */rmgol* _(Para remover da lista de goleiros)_'
-        ;
+        '\nEstá *ABERTA* a inscrição de jogadores da ' + GRUPO + orientacoes;
 
         const chat = await findGroupByName(GRUPO);
         if (chat) {
@@ -412,6 +413,11 @@ client.on('message', async msg => {
         "/pg",
         "/ver"
     ];
+
+    if (comandosListas.includes(comando) && args[0]) {
+        msg.reply("⚠️ Comando não permitido." + orientacoes);
+        return;
+    }
 
     if (comandosListas.includes(comando) && !listaAberta) {
         msg.reply("Lista fechada. Entre em contato com um administrador do grupo.");
