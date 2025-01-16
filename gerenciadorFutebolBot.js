@@ -253,7 +253,7 @@ class FutebolEventManager {
 
         const tipos = { pix: '🔄', dinheiro: '💵', cartao: '💳' };
 
-        this.listaPrincipal[index] += ' => ' + tipos[tipoPagamento];
+        this.listaPrincipal[index] = tipos[tipoPagamento] + this.listaPrincipal[index];
 
         this.salvarListasNaPlanilha();
         return this.exibirListas();
