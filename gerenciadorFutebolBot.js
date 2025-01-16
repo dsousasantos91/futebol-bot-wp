@@ -251,9 +251,9 @@ class FutebolEventManager {
             return "\nNão há jogador nesta posição para remover.";
         }
 
-        const tipos = { pix: '🔄', dinheiro: '🤑', cartao: '💳' };
+        const tipos = { pix: '🔄', dinheiro: '💵', cartao: '💳' };
 
-        this.listaPrincipal[index] = tipos[tipoPagamento] + this.listaPrincipal[index];
+        this.listaPrincipal[index] += ' => ' + tipos[tipoPagamento];
 
         this.salvarListasNaPlanilha();
         return this.exibirListas();
