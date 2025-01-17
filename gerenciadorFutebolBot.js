@@ -318,7 +318,7 @@ class FutebolEventManager {
             return "\nNão há jogador nesta posição para remover.";
         }
 
-        const tipos = { 'pix': '🔄', 'dinheiro': '💵', 'cartão': '💳' };
+        const tipos = { '1': '🔄', '2': '💵', '3': '💳' };
 
         const jogadorPagante = this.listaPrincipal[index] + ' => ' + tipos[tipoPagamento];
         const indexPgt = this.listaPagos.findIndex(
@@ -603,9 +603,7 @@ client.on('message', async msg => {
         "/limpar",
         "/reiniciar",
         "/sortear",
-        "/pgp",
-        "/pgd",
-        "/pgc",
+        "/pg",
         "/caixa",
         "/ver"
     ];
@@ -713,8 +711,6 @@ client.on('message', async msg => {
         return;
     }
 
-    const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
-
     if (comando === "/pg") {
         if (!args[0]) {
             msg.reply("Posição não informada. *Exemplo: /pg 1*");
@@ -722,28 +718,22 @@ client.on('message', async msg => {
         }
 
         // Criar botões para selecionar o método de pagamento
-        const buttons = new Buttons(
-            'Escolha o método de pagamento:',
-            [
-                { body: 'Dinheiro' },
-                { body: 'Pix' },
-                { body: 'Cartão' }
-            ],
-            'Método de Pagamento',
-            'Selecione uma das opções acima'
-        );
+        const opcoes = '*Escolha o método de pagamento:*\n\n' +
+            ['1. Pix', '2. Dinheiro', '3. Cartão'].join('\n') +
+            '\n\nMétodo de Pagamento' +
+            '\nSelecione uma das opções acima';
 
         // Enviar os botões para o usuário
-        msg.reply(buttons);
+        msg.reply(opcoes);
 
         // Adicionar listener para capturar a resposta do botão
         client.on('message', async (buttonResponse) => {
-            if (buttonResponse.from === msg.from) {
+            if (buttonResponse.author === msg.author || buttonResponse.from === msg.from) {
                 const resposta = buttonResponse.body; // O texto do botão clicado
                 const posicao = parseInt(args[0]);
 
                 // Chamar o método informarPagamento com base na resposta
-                if (['Dinheiro', 'Pix', 'Cartão'].includes(resposta)) {
+                if (['1', '2', '3'].includes(resposta)) {
                     const respostaPagamento = gerenciador.informarPagamento(posicao, resposta.toLowerCase());
                     msg.reply(respostaPagamento);
                 } else {
