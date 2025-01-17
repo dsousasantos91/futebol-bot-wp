@@ -339,37 +339,60 @@ class FutebolEventManager {
         return this.exibirListas();
     }
 
-    resumoCaixa() {
-        const totais = {
-            pix: 0,
-            dinheiro: 0,
-            cartao: 0,
-        };
+    async resumoCaixa(dataAtual) {
+        try {
+            // Carregar credenciais
+            const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+            const auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: [SCOPES],
+            });
     
-        // Contar as ocorrências de cada forma de pagamento
-        this.listaPagos.forEach((pagoPor) => {
-            if (pagoPor.nome.includes('🔄')) {
-                totais.pix += TAXA_PARTICIPANTE;
-            } 
-            if (pagoPor.nome.includes('💵')) {
-                totais.dinheiro += TAXA_PARTICIPANTE;
-            } 
-            if (pagoPor.nome.includes('💳')) {
-                totais.cartao += TAXA_PARTICIPANTE;
-            }
-        });
+            const sheets = google.sheets({ version: "v4", auth });
 
-        const qtdPendencias = this.listaPrincipal.filter(jogador => jogador !== null).length;
+            // Buscar dados da planilha
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SHEET_ID,
+                range: 'resumoCaixa!A2:G',
+            });
     
-        // Montar a mensagem formatada para WhatsApp
-        const mensagem = `*Resumo do Caixa do Dia ${getDateNow()}:*\n` +
-            `🔄 *Pix*: R$ ${totais.pix} \n` +
-            `💵 *Dinheiro*: R$ ${totais.dinheiro} \n` +
-            `💳 *Cartão*: R$ ${totais.cartao} \n` +
-            `\n💰 *Total Recebido*: R$ ${totais.pix + totais.dinheiro + totais.cartao} \n` +
-            `\n💸 *Total pendente*: R$ ${qtdPendencias * TAXA_PARTICIPANTE} \n`;
+            const rows = response.data.values;
     
-        return mensagem;
+            if (!rows || rows.length === 0) {
+                return 'Nenhuma informação encontrada na planilha.';
+            }
+    
+            // Procurar a linha correspondente à data fornecida
+            const dataLinha = rows.find(row => row[0] === dataAtual);
+    
+            if (!dataLinha) {
+                return `Nenhum registro encontrado para a data ${dataAtual}.`;
+            }
+    
+            // Extrair valores da linha correspondente
+            const [_, pix, cartao, dinheiro, totalRecebido, pendentes, totalPendente] = dataLinha;
+    
+            // Processar lista de pendentes
+            const listaPendentes = pendentes ? pendentes.split(',').map(nome => nome.trim()) : [];
+
+            const listaPendentesFormatada = listaPendentes.map((jogador, index) => {
+                return `${index + 1} - ${jogador || ""}\n`;
+            }) || [];
+    
+            // Montar a mensagem formatada para WhatsApp
+            const mensagem = `*Resumo do Caixa do Dia ${dataAtual}:*\n\n` +
+                `🔄 *Pix*: R$ ${parseFloat(pix).toFixed(2)} \n` +
+                `💳 *Cartão*: R$ ${parseFloat(cartao).toFixed(2)} \n` +
+                `💵 *Dinheiro*: R$ ${parseFloat(dinheiro).toFixed(2)} \n` +
+                `\n💰 *Total Recebido*: R$ ${parseFloat(totalRecebido).toFixed(2)} \n` +
+                `\n📋 *Pendentes*:\n ${listaPendentesFormatada.length > 0 ? listaPendentesFormatada : 'Nenhum'} \n` +
+                `\n💸 *Total pendente*: R$ ${parseFloat(totalPendente).toFixed(2)} \n`;
+    
+            return mensagem;
+        } catch (error) {
+            console.error('Erro ao acessar a planilha:', error);
+            return 'Erro ao buscar informações na planilha.';
+        }
     }
 
     async registrarCaixaNaPlanilha() {
@@ -719,7 +742,7 @@ client.on('message', async msg => {
 
         // Criar botões para selecionar o método de pagamento
         const opcoes = '*Escolha o método de pagamento:*\n\n' +
-            ['1. Pix', '2. Dinheiro', '3. Cartão'].join('\n') +
+            ['1. Pix', '2. Dinheiro', '3. Cartão', '0. Cancelar'].join('\n') +
             '\n\nMétodo de Pagamento' +
             '\nSelecione uma das opções acima';
 
@@ -733,6 +756,7 @@ client.on('message', async msg => {
                 const posicao = parseInt(args[0]);
 
                 // Chamar o método informarPagamento com base na resposta
+                if (resposta === '0') return;
                 if (['1', '2', '3'].includes(resposta)) {
                     const respostaPagamento = gerenciador.informarPagamento(posicao, resposta.toLowerCase());
                     msg.reply(respostaPagamento);
@@ -746,7 +770,11 @@ client.on('message', async msg => {
     }
 
     if(comando === "/caixa") {
-        const respostaCaixa = gerenciador.resumoCaixa();
+        if (!args[0]) {
+            msg.reply("Data caixa não informada. *Exemplo: /caixa 01/01/2025*");
+            return;
+        }
+        const respostaCaixa = await gerenciador.resumoCaixa(args[0]);
         msg.reply(respostaCaixa);
         return;
     }
