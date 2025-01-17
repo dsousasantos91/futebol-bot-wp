@@ -37,6 +37,7 @@ class FutebolEventManager {
         this.listaGoleiros = [...data.listaGoleiros, ...Array(3 - data.listaGoleiros.length).fill(null)];
         this.listaPrincipal = [...data.listaPrincipal, ...Array(15 - data.listaPrincipal.length).fill(null)];
         this.listaEspera = data.listaEspera || [];
+        this.listaPagos = data.listaPagos || [];
     }
 
     async carregarListasDaPlanilha() {
@@ -55,6 +56,7 @@ class FutebolEventManager {
                 listaGoleiros: Array(3).fill(null),
                 listaPrincipal: Array(15).fill(null),
                 listaEspera: [],
+                listaPagos: []
             };
     
             // Tenta carregar os dados de cada aba
@@ -93,7 +95,8 @@ class FutebolEventManager {
             const data = {
                 listaGoleiros: this.listaGoleiros || [],
                 listaPrincipal: this.listaPrincipal || [],
-                listaEspera: this.listaEspera || []
+                listaEspera: this.listaEspera || [],
+                listaPagos: this.listaPagos || []
             };
 
             // Limpar dados existentes nas abas correspondentes
@@ -144,13 +147,24 @@ class FutebolEventManager {
             mensagem += `${index + 1} - ${jogador || ""}\n`;
         });
 
-        mensagem += "\n*⏳ Lista de espera*\n";
-        if (this.listaEspera.length) {
-            this.listaEspera.forEach((jogador, index) => {
-                mensagem += `${index + 1} - ${jogador}\n`;
+        if (listaAberta) {
+            mensagem += "\n*⏳ Lista de espera*\n";
+            if (this.listaEspera.length) {
+                this.listaEspera.forEach((jogador, index) => {
+                    mensagem += `${index + 1} - ${jogador}\n`;
+                });
+            }
+
+            if (!this.listaEspera.length) {
+                mensagem += '_A lista de espera está vazia._'
+            }
+        }
+
+        if (!listaAberta) {
+            mensagem += "\n*💲 Pagos:*\n";
+            this.listaPagos.forEach((jogador, index) => {
+                mensagem += `${index + 1} - ${jogador || ""}\n`;
             });
-        } else {
-            mensagem += '_A lista de espera está vazia._'
         }
 
         return mensagem;
@@ -253,7 +267,15 @@ class FutebolEventManager {
 
         const tipos = { pix: '🔄', dinheiro: '💵', cartao: '💳' };
 
-        this.listaPrincipal[index] += ' => ' + tipos[tipoPagamento];
+        const jogadorPagante = this.listaPrincipal[index] + ' => ' + tipos[tipoPagamento];
+        const indexPgt = this.listaPagos.indexOf(jogadorPagante);
+        
+        if(indexPgt !== -1) {
+            return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt];
+        }
+
+        this.listaPagos.push(jogadorPagante);
+        this.listaPrincipal.splice(index, 1);
 
         this.salvarListasNaPlanilha();
         return this.exibirListas();
@@ -318,6 +340,8 @@ class FutebolEventManager {
 
     fecharLista() {
         listaAberta = false;
+        this.listaEspera = [];
+        this.salvarListasNaPlanilha();
     }
 }
 
@@ -410,7 +434,9 @@ client.on('message', async msg => {
         "/limpar",
         "/reiniciar",
         "/sortear",
-        "/pg",
+        "/pgp",
+        "/pgd",
+        "/pgc",
         "/ver"
     ];
 
@@ -517,12 +543,32 @@ client.on('message', async msg => {
         return;
     }
 
-    if(comando === "/pg") {
-        if (!args[0] || !args[1]) {
-            msg.reply("Posição ou tipo de pagamento não informada. *Exemplo: /pg 1 pix*");
+    if(comando === "/pgp") {
+        if (!args[0]) {
+            msg.reply("Posição não informada. *Exemplo: /pg 1*");
             return;
         }
-        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), args[1]);
+        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), 'pix');
+        msg.reply(respostaPagamento);
+        return;
+    }
+
+    if(comando === "/pgd") {
+        if (!args[0]) {
+            msg.reply("Posição não informada. *Exemplo: /pg 1*");
+            return;
+        }
+        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), 'dinheiro');
+        msg.reply(respostaPagamento);
+        return;
+    }
+
+    if(comando === "/pgc") {
+        if (!args[0]) {
+            msg.reply("Posição não informada. *Exemplo: /pg 1*");
+            return;
+        }
+        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), 'cartao');
         msg.reply(respostaPagamento);
         return;
     }
