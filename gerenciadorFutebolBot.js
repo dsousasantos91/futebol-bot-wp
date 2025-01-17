@@ -15,6 +15,7 @@ const ADMINS = process.env.ADMINS.split(',');
 const JOGADORES_FIXOS = process.env.JOGADORES_FIXOS.split(',');
 const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
+const TAXA_PARTICIPANTE = parseInt(process.env.TAXA_PARTICIPANTE);
 const GRUPO = process.env.GRUPO
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const SCOPES = process.env.GOOGLE_SHEET_SCOPES || "https://www.googleapis.com/auth/spreadsheets";
@@ -64,11 +65,16 @@ class FutebolEventManager {
                 try {
                     const response = await sheets.spreadsheets.values.get({
                         spreadsheetId: SHEET_ID,
-                        range: `${key}!A2:A`, // Ignora a primeira linha (cabeçalho)
+                        range: `${key}!A2:B`, // Ignora a primeira linha (cabeçalho)
                     });
     
                     const values = response.data.values || [];
-                    data[key] = values.map(row => row[0]); // Extrai o valor de cada linha
+                    data[key] = values.map(row => {
+                        if (key === 'listaPagos') {
+                            return { nome: row[0], dataPagamento: row[1]}
+                        }
+                        return row[0];
+                    }); // Extrai o valor de cada linha
                 } catch (error) {
                     console.warn(`Erro ao carregar a aba ${key}:`, error.message);
                 }
@@ -95,8 +101,7 @@ class FutebolEventManager {
             const data = {
                 listaGoleiros: this.listaGoleiros || [],
                 listaPrincipal: this.listaPrincipal || [],
-                listaEspera: this.listaEspera || [],
-                listaPagos: this.listaPagos || []
+                listaEspera: this.listaEspera || []
             };
 
             // Limpar dados existentes nas abas correspondentes
@@ -133,6 +138,52 @@ class FutebolEventManager {
         }
     }
 
+    async salvarPagamentoNaPlanilha() {
+        try {
+            // Carregar credenciais
+            const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+            const auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: [SCOPES],
+            });
+    
+            const sheets = google.sheets({ version: "v4", auth });
+    
+            // Obter os dados existentes da planilha
+            const existingDataResponse = await sheets.spreadsheets.values.get({
+                spreadsheetId: SHEET_ID,
+                range: `listaPagos!A:B`, // Intervalo da tabela
+            });
+    
+            const existingData = existingDataResponse.data.values || [];
+    
+            // Construir os valores a partir de this.listaPagos que ainda não existem na planilha
+            const newValues = this.listaPagos
+            .filter((pagoPor) =>
+                    !existingData.some((row) => row[0] === pagoPor.nome && row[1] === pagoPor.dataPagamento)
+            )
+            .map(pagoPor => [pagoPor.nome, pagoPor.dataPagamento]);
+    
+            if (newValues.length === 0) {
+                console.log("Nenhum novo pagamento para salvar.");
+                return;
+            }
+    
+            // Adiciona os novos pagamentos à planilha
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: SHEET_ID,
+                range: `listaPagos!A:B`, // Intervalo da tabela
+                valueInputOption: 'RAW',
+                resource: {
+                    values: newValues, // Adiciona apenas as entradas que não são duplicadas
+                },
+            });
+    
+            console.log("Novos pagamentos salvos no Google Sheets com sucesso!");
+        } catch (error) {
+            console.error("Erro ao salvar lista de pagamento no Google Sheets:", error);
+        }
+    }   
     
 
     exibirListas() {
@@ -162,9 +213,11 @@ class FutebolEventManager {
 
         if (!listaAberta) {
             mensagem += "\n*💲 Pagos:*\n";
-            this.listaPagos.forEach((jogador, index) => {
-                mensagem += `${index + 1} - ${jogador || ""}\n`;
-            });
+            this.listaPagos
+                .map(jogador => jogador.nome)
+                .forEach((jogador, index) => {
+                    mensagem += `${index + 1} - ${jogador || ""}\n`;
+                });
         }
 
         return mensagem;
@@ -268,19 +321,135 @@ class FutebolEventManager {
         const tipos = { pix: '🔄', dinheiro: '💵', cartao: '💳' };
 
         const jogadorPagante = this.listaPrincipal[index] + ' => ' + tipos[tipoPagamento];
-        const indexPgt = this.listaPagos.indexOf(jogadorPagante);
+        const indexPgt = this.listaPagos.findIndex(
+            (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === getDateNow()
+        );
         
         if(indexPgt !== -1) {
             return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt];
         }
 
-        this.listaPagos.push(jogadorPagante);
+        this.listaPagos.push({ nome: jogadorPagante, dataPagamento: getDateNow()});
         this.listaPrincipal.splice(index, 1);
+        this.listaPrincipal = this.listaPrincipal.filter(jogador => jogador !== null);
 
+        this.salvarPagamentoNaPlanilha();
         this.salvarListasNaPlanilha();
+        this.registrarCaixaNaPlanilha();
         return this.exibirListas();
     }
 
+    resumoCaixa() {
+        const totais = {
+            pix: 0,
+            dinheiro: 0,
+            cartao: 0,
+        };
+    
+        // Contar as ocorrências de cada forma de pagamento
+        this.listaPagos.forEach((pagoPor) => {
+            if (pagoPor.nome.includes('🔄')) {
+                totais.pix += TAXA_PARTICIPANTE;
+            } 
+            if (pagoPor.nome.includes('💵')) {
+                totais.dinheiro += TAXA_PARTICIPANTE;
+            } 
+            if (pagoPor.nome.includes('💳')) {
+                totais.cartao += TAXA_PARTICIPANTE;
+            }
+        });
+
+        const qtdPendencias = this.listaPrincipal.filter(jogador => jogador !== null).length;
+    
+        // Montar a mensagem formatada para WhatsApp
+        const mensagem = `*Resumo do Caixa do Dia ${getDateNow()}:*\n` +
+            `🔄 *Pix*: R$ ${totais.pix} \n` +
+            `💵 *Dinheiro*: R$ ${totais.dinheiro} \n` +
+            `💳 *Cartão*: R$ ${totais.cartao} \n` +
+            `\n💰 *Total Recebido*: R$ ${totais.pix + totais.dinheiro + totais.cartao} \n` +
+            `\n💸 *Total pendente*: R$ ${qtdPendencias * TAXA_PARTICIPANTE} \n`;
+    
+        return mensagem;
+    }
+
+    async registrarCaixaNaPlanilha() {
+        try {
+            // Carregar credenciais
+            const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+            const auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: [SCOPES],
+            });
+    
+            const sheets = google.sheets({ version: "v4", auth });
+    
+            // Calcular o resumo do caixa
+            const totais = {
+                pix: 0,
+                dinheiro: 0,
+                cartao: 0,
+            };
+    
+            this.listaPagos.forEach((pagoPor) => {
+                if (pagoPor.nome.includes('🔄')) {
+                    totais.pix += TAXA_PARTICIPANTE;
+                }
+                if (pagoPor.nome.includes('💵')) {
+                    totais.dinheiro += TAXA_PARTICIPANTE;
+                }
+                if (pagoPor.nome.includes('💳')) {
+                    totais.cartao += TAXA_PARTICIPANTE;
+                }
+            });
+    
+            const totalRecebido = totais.pix + totais.dinheiro + totais.cartao;
+            const dataAtual = getDateNow(); // Formato: dd/mm/aaaa
+    
+            // Buscar registros existentes para a data atual
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SHEET_ID,
+                range: `resumoCaixa!A:A`, // Buscar apenas a coluna A (datas)
+            });
+    
+            const rows = response.data.values || [];
+    
+            // Verificar se já existe um registro para a data
+            const indexExistente = rows.findIndex(row => row[0] === dataAtual);
+    
+            if (indexExistente !== -1) {
+                // Se já existe, atualizar o registro
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SHEET_ID,
+                    range: `resumoCaixa!A${indexExistente + 1}:G${indexExistente + 1}`, // Atualizar a linha correspondente
+                    valueInputOption: 'RAW',
+                    resource: {
+                        values: [
+                            [dataAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join('\n'), this.listaPrincipal.length * TAXA_PARTICIPANTE],
+                        ],
+                    },
+                });
+                console.log("Resumo do caixa atualizado no Google Sheets com sucesso!");
+            } else {
+                // Se não existe, adicionar um novo registro
+                const values = [
+                    [dataAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join('\n'), this.listaPrincipal.length * TAXA_PARTICIPANTE],
+                ];
+    
+                await sheets.spreadsheets.values.append({
+                    spreadsheetId: SHEET_ID,
+                    range: `resumoCaixa!A:F`, // Intervalo da tabela
+                    valueInputOption: 'RAW',
+                    resource: {
+                        values: values,
+                    },
+                });
+                console.log("Resumo do caixa registrado no Google Sheets com sucesso!");
+            }
+        } catch (error) {
+            console.error("Erro ao registrar ou atualizar resumo do caixa no Google Sheets:", error);
+        }
+    } 
+    
     adicionarListaCompleta(nomes, isGoleiros = false) {
         nomes.forEach(nome => this.adicionar(nome, isGoleiros));
         this.salvarListasNaPlanilha();
@@ -437,6 +606,7 @@ client.on('message', async msg => {
         "/pgp",
         "/pgd",
         "/pgc",
+        "/caixa",
         "/ver"
     ];
 
@@ -572,11 +742,21 @@ client.on('message', async msg => {
         msg.reply(respostaPagamento);
         return;
     }
+
+    if(comando === "/caixa") {
+        const respostaCaixa = gerenciador.resumoCaixa();
+        msg.reply(respostaCaixa);
+        return;
+    }
 });
 
 async function findGroupByName(name) {
     const chats = await client.getChats();
     return chats.find(chat => chat.name === name);
+}
+
+function getDateNow() {
+    return new Date().toLocaleDateString('pt-BR');
 }
 
 client.initialize();
