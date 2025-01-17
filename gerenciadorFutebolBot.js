@@ -189,14 +189,18 @@ class FutebolEventManager {
     exibirListas() {
         let mensagem = "\nLista Pelada\nQuinta 21:40\n";
         mensagem += "\n*🥅 Goleiros:*\n";
-        this.listaGoleiros.forEach((goleiro, index) => {
-            mensagem += `${index + 1} - ${goleiro || ""}\n`;
-        });
+        this.listaGoleiros
+            .filter(goleiro => goleiro !== null)
+            .forEach((goleiro, index) => {
+                mensagem += `${index + 1} - ${goleiro || ""}\n`;
+            });
 
         mensagem += "\n*📋 Jogadores:*\n";
-        this.listaPrincipal.forEach((jogador, index) => {
-            mensagem += `${index + 1} - ${jogador || ""}\n`;
-        });
+        this.listaPrincipal
+            .filter(jogador => jogador !== null)    
+            .forEach((jogador, index) => {
+                    mensagem += `${index + 1} - ${jogador || ""}\n`;
+            });
 
         if (listaAberta) {
             mensagem += "\n*⏳ Lista de espera*\n";
@@ -209,15 +213,6 @@ class FutebolEventManager {
             if (!this.listaEspera.length) {
                 mensagem += '_A lista de espera está vazia._'
             }
-        }
-
-        if (!listaAberta) {
-            mensagem += "\n*💲 Pagos:*\n";
-            this.listaPagos
-                .map(jogador => jogador.nome)
-                .forEach((jogador, index) => {
-                    mensagem += `${index + 1} - ${jogador || ""}\n`;
-                });
         }
 
         return mensagem;
@@ -308,36 +303,180 @@ class FutebolEventManager {
         return this.exibirListas();
     }
 
-    informarPagamento(posicao, tipoPagamento) {
-        if (posicao < 1 || posicao > 15) {
-            return "\nPosição inválida. Escolha uma posição entre 1 e 15.";
-        }
+    async informarPagamentoAtrasado(posicao, dataPelada, tipoPagamento) {
+        try {
+            // Carregar credenciais
+            const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+            const auth = new google.auth.GoogleAuth({
+                credentials,
+                scopes: [SCOPES],
+            });
+    
+            const sheets = google.sheets({ version: "v4", auth });
+    
+            // Buscar dados da planilha
+            const response = await sheets.spreadsheets.values.get({
+                spreadsheetId: SHEET_ID,
+                range: 'resumoCaixa!A2:G',
+            });
+    
+            const rows = response.data.values;
+    
+            if (!rows || rows.length === 0) {
+                return 'Nenhuma informação encontrada na planilha.';
+            }
+    
+            // Encontrar a linha correspondente à data
+            const rowIndex = rows.findIndex(row => row[0] === dataPelada);
+    
+            let nomeJogador = '<vazio>'
 
-        const index = posicao - 1;
-        if (this.listaPrincipal[index] === null) {
-            return "\nNão há jogador nesta posição para remover.";
-        }
-
-        const tipos = { '1': '🔄', '2': '💵', '3': '💳' };
-
-        const jogadorPagante = this.listaPrincipal[index] + ' => ' + tipos[tipoPagamento];
-        const indexPgt = this.listaPagos.findIndex(
-            (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === getDateNow()
-        );
+            // Se a linha não existir, vamos criar uma nova linha no final
+            if (rowIndex === -1) {
+                nomeJogador = await this.registrarNovaDataPagamento(posicao, dataPelada, tipoPagamento, sheets, nomeJogador);
+            }
+    
+            if (rowIndex !== -1) {
+                // Extrair a linha correspondente
+                const dataLinha = rows[rowIndex];
+                const [_, pix, cartao, dinheiro, totalRecebido, pendentes, totalPendente] = dataLinha;
         
-        if(indexPgt !== -1) {
-            return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt];
+                // Processar a lista de pendentes
+                let listaPendentes = pendentes ? pendentes.split(',').map(nome => nome.trim()) : [];
+        
+                // Verificar se a posição está dentro do limite da lista de pendentes
+                if (posicao < 1 || posicao > listaPendentes.length) {
+                    return `Posição inválida. A lista de pendentes tem apenas ${listaPendentes.length} jogadores.`;
+                }
+        
+                // Obter o nome do jogador pela posição
+                nomeJogador = listaPendentes[posicao - 1]; // Posição é 1-based, então subtraímos 1
+        
+                // Remover o jogador da lista de pendentes
+                listaPendentes = listaPendentes.filter((jogador, index) => index !== (posicao - 1));
+        
+                // Atualizar o valor do tipo de pagamento
+                const valorPagamento = parseFloat(TAXA_PARTICIPANTE); // Defina TAXA_PARTICIPANTE como constante ou variável
+                let novoPix = parseFloat(pix);
+                let novoCartao = parseFloat(cartao);
+                let novoDinheiro = parseFloat(dinheiro);
+                let novoTotalRecebido = parseFloat(totalRecebido);
+        
+                switch (tipoPagamento.toLowerCase()) {
+                    case '1':
+                        novoPix += valorPagamento;
+                        break;
+                    case '2':
+                        novoDinheiro += valorPagamento;
+                        break;
+                    case '3':
+                        novoCartao += valorPagamento;
+                        break;
+                    default:
+                        return 'Método de pagamento inválido. Use "1 (pix)", "2 (dinheiro)" ou "3 (cartao)".';
+                }
+        
+                // Atualizar o total recebido
+                novoTotalRecebido += valorPagamento;
+        
+                // Atualizar valores na planilha
+                const updatedRow = [
+                    dataPelada,
+                    novoPix.toFixed(2),
+                    novoCartao.toFixed(2),
+                    novoDinheiro.toFixed(2),
+                    novoTotalRecebido.toFixed(2),
+                    listaPendentes.join(','),
+                    (parseFloat(totalPendente) - valorPagamento).toFixed(2),
+                ];
+
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SHEET_ID,
+                    range: `resumoCaixa!A${rowIndex + 2}:G${rowIndex + 2}`,
+                    valueInputOption: 'RAW',
+                    requestBody: {
+                        values: [updatedRow],
+                    },
+                });
+            }
+    
+            const tipos = { '1': '🔄', '2': '💵', '3': '💳' };
+    
+            const indexPrincipal = this.listaPrincipal.findIndex(jogador => jogador === nomeJogador);
+            const jogadorPagante = this.listaPrincipal[indexPrincipal] + ' => ' + tipos[tipoPagamento];
+            const indexPgt = this.listaPagos.findIndex(
+                (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === getDateNow()
+            );
+            
+            if(indexPgt !== -1) {
+                return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt];
+            }
+    
+            this.listaPagos.push({ nome: jogadorPagante, dataPagamento: dataPelada });    
+            this.salvarPagamentoNaPlanilha();
+    
+            return `Pagamento de ${nomeJogador} registrado com sucesso como ${tipoPagamento}.`;
+        } catch (error) {
+            console.error('Erro ao registrar pagamento atrasado:', error);
+            return 'Erro ao registrar pagamento atrasado na planilha.';
         }
-
-        this.listaPagos.push({ nome: jogadorPagante, dataPagamento: getDateNow()});
-        this.listaPrincipal.splice(index, 1);
-        this.listaPrincipal = this.listaPrincipal.filter(jogador => jogador !== null);
-
-        this.salvarPagamentoNaPlanilha();
-        this.salvarListasNaPlanilha();
-        this.registrarCaixaNaPlanilha();
-        return this.exibirListas();
     }
+    
+    async registrarNovaDataPagamento(posicao, dataPelada, tipoPagamento, sheets, nomeJogador) {
+        try {
+            // Definir os valores iniciais
+            const valorPagamento = parseFloat(TAXA_PARTICIPANTE); // Defina TAXA_PARTICIPANTE como constante ou variável
+            
+            const tipos = { '1': '🔄', '2': '💵', '3': '💳' };
+            nomeJogador = this.listaPrincipal[posicao - 1]; // Posição é 1-based
+            const novoTotalRecebido = valorPagamento;
+
+            const listaPendentes = this.listaPrincipal
+                .filter(jogador => jogador !== null)
+                .filter(jogador => jogador !== nomeJogador); // Supondo que a lista de pendentes é obtida de algum lugar
+    
+            let novoPix = 0, novoDinheiro = 0, novoCartao = 0;
+            switch (tipoPagamento.toLowerCase()) {
+                case '1':
+                    novoPix = valorPagamento;
+                    break;
+                case '2':
+                    novoDinheiro = valorPagamento;
+                    break;
+                case '3':
+                    novoCartao = valorPagamento;
+                    break;
+                default:
+                    return 'Método de pagamento inválido.';
+            }
+    
+            // Criar o registro para a nova linha
+            const newRow = [
+                dataPelada,
+                novoPix.toFixed(2),
+                novoCartao.toFixed(2),
+                novoDinheiro.toFixed(2),
+                novoTotalRecebido.toFixed(2),
+                listaPendentes.join(','),
+                valorPagamento.toFixed(2) * listaPendentes.length,
+            ];
+    
+            // Adicionar a nova linha à planilha
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: SHEET_ID,
+                range: 'resumoCaixa!A2:G',
+                valueInputOption: 'RAW',
+                requestBody: {
+                    values: [newRow],
+                },
+            });
+    
+            return nomeJogador;
+        } catch (error) {
+            console.error('Erro ao registrar nova data na planilha:', error);
+            return 'Erro ao registrar nova data na planilha.';
+        }
+    }    
 
     async resumoCaixa(dataAtual) {
         try {
@@ -376,16 +515,25 @@ class FutebolEventManager {
             const listaPendentes = pendentes ? pendentes.split(',').map(nome => nome.trim()) : [];
 
             const listaPendentesFormatada = listaPendentes.map((jogador, index) => {
-                return `${index + 1} - ${jogador || ""}\n`;
+                return `${index + 1} - ${jogador || ""}`;
             }) || [];
     
+
+            const listaPagosFormatada = this.listaPagos
+                .filter(jogador => jogador.dataPagamento === dataAtual)
+                .map((jogador, index) => {
+                    return `${index + 1} - ${jogador.nome || ""}`;
+                });
+
+
             // Montar a mensagem formatada para WhatsApp
             const mensagem = `*Resumo do Caixa do Dia ${dataAtual}:*\n\n` +
                 `🔄 *Pix*: R$ ${parseFloat(pix).toFixed(2)} \n` +
                 `💳 *Cartão*: R$ ${parseFloat(cartao).toFixed(2)} \n` +
                 `💵 *Dinheiro*: R$ ${parseFloat(dinheiro).toFixed(2)} \n` +
                 `\n💰 *Total Recebido*: R$ ${parseFloat(totalRecebido).toFixed(2)} \n` +
-                `\n📋 *Pendentes*:\n ${listaPendentesFormatada.length > 0 ? listaPendentesFormatada : 'Nenhum'} \n` +
+                `\n💲 *Pagos*:\n${listaPagosFormatada.length > 0 ? listaPagosFormatada.join('\n') : 'Nenhum'} \n` +
+                `\n📋 *Pendentes*:\n${listaPendentesFormatada.length > 0 ? listaPendentesFormatada.join('\n') : 'Nenhum'} \n` +
                 `\n💸 *Total pendente*: R$ ${parseFloat(totalPendente).toFixed(2)} \n`;
     
             return mensagem;
@@ -455,7 +603,7 @@ class FutebolEventManager {
             } else {
                 // Se não existe, adicionar um novo registro
                 const values = [
-                    [dataAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join('\n'), this.listaPrincipal.length * TAXA_PARTICIPANTE],
+                    [dataAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join(','), this.listaPrincipal.length * TAXA_PARTICIPANTE],
                 ];
     
                 await sheets.spreadsheets.values.append({
@@ -742,7 +890,7 @@ client.on('message', async msg => {
 
         // Criar botões para selecionar o método de pagamento
         const opcoes = '*Escolha o método de pagamento:*\n\n' +
-            ['1. Pix', '2. Dinheiro', '3. Cartão', '0. Cancelar'].join('\n') +
+            ['1. Pix', '2. Dinheiro', '3. Cartão', '4. Cancelar'].join('\n') +
             '\n\nMétodo de Pagamento' +
             '\nSelecione uma das opções acima';
 
@@ -750,31 +898,44 @@ client.on('message', async msg => {
         msg.reply(opcoes);
 
         // Adicionar listener para capturar a resposta do botão
-        client.on('message', async (buttonResponse) => {
+        const listener = async (buttonResponse) => {
             if (buttonResponse.author === msg.author || buttonResponse.from === msg.from) {
                 const resposta = buttonResponse.body; // O texto do botão clicado
                 const posicao = parseInt(args[0]);
 
+                if (resposta === '4') {
+                    msg.reply('Operação cancelada.');
+                    client.off('message', listener);
+                    return;
+                }
+
                 // Chamar o método informarPagamento com base na resposta
-                if (resposta === '0') return;
-                if (['1', '2', '3'].includes(resposta)) {
-                    const respostaPagamento = gerenciador.informarPagamento(posicao, resposta.toLowerCase());
+                const respostaValida = ['1', '2', '3'].includes(resposta)
+                if (respostaValida) {
+                    let respostaPagamento = '';
+                    respostaPagamento = await gerenciador.informarPagamentoAtrasado(args[0], args[1] || getDateNow(), resposta.toLowerCase());
                     msg.reply(respostaPagamento);
-                } else {
+                    const respostaCaixa = await gerenciador.resumoCaixa(args[1] || getDateNow());
+                    msg.reply(respostaCaixa); 
+                }
+
+                if (!respostaValida) {
                     msg.reply('Método de pagamento inválido.');
                 }
+
+                // Remover o listener após capturar a resposta
+                client.off('message', listener);
             }
-        });
+        };
+
+        // Adicionar o listener ao client
+        client.on('message', listener);
 
         return;
     }
 
     if(comando === "/caixa") {
-        if (!args[0]) {
-            msg.reply("Data caixa não informada. *Exemplo: /caixa 01/01/2025*");
-            return;
-        }
-        const respostaCaixa = await gerenciador.resumoCaixa(args[0]);
+        const respostaCaixa = await gerenciador.resumoCaixa(args[0] || getDateNow());
         msg.reply(respostaCaixa);
         return;
     }
