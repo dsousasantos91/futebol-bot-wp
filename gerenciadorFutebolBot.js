@@ -318,7 +318,7 @@ class FutebolEventManager {
             return "\nNão há jogador nesta posição para remover.";
         }
 
-        const tipos = { pix: '🔄', dinheiro: '💵', cartao: '💳' };
+        const tipos = { 'pix': '🔄', 'dinheiro': '💵', 'cartão': '💳' };
 
         const jogadorPagante = this.listaPrincipal[index] + ' => ' + tipos[tipoPagamento];
         const indexPgt = this.listaPagos.findIndex(
@@ -713,33 +713,45 @@ client.on('message', async msg => {
         return;
     }
 
-    if(comando === "/pgp") {
-        if (!args[0]) {
-            msg.reply("Posição não informada. *Exemplo: /pg 1*");
-            return;
-        }
-        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), 'pix');
-        msg.reply(respostaPagamento);
-        return;
-    }
+    const { Client, Buttons, LocalAuth } = require('whatsapp-web.js');
 
-    if(comando === "/pgd") {
+    if (comando === "/pg") {
         if (!args[0]) {
             msg.reply("Posição não informada. *Exemplo: /pg 1*");
             return;
         }
-        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), 'dinheiro');
-        msg.reply(respostaPagamento);
-        return;
-    }
 
-    if(comando === "/pgc") {
-        if (!args[0]) {
-            msg.reply("Posição não informada. *Exemplo: /pg 1*");
-            return;
-        }
-        const respostaPagamento = gerenciador.informarPagamento(parseInt(args[0]), 'cartao');
-        msg.reply(respostaPagamento);
+        // Criar botões para selecionar o método de pagamento
+        const buttons = new Buttons(
+            'Escolha o método de pagamento:',
+            [
+                { body: 'Dinheiro' },
+                { body: 'Pix' },
+                { body: 'Cartão' }
+            ],
+            'Método de Pagamento',
+            'Selecione uma das opções acima'
+        );
+
+        // Enviar os botões para o usuário
+        msg.reply(buttons);
+
+        // Adicionar listener para capturar a resposta do botão
+        client.on('message', async (buttonResponse) => {
+            if (buttonResponse.from === msg.from) {
+                const resposta = buttonResponse.body; // O texto do botão clicado
+                const posicao = parseInt(args[0]);
+
+                // Chamar o método informarPagamento com base na resposta
+                if (['Dinheiro', 'Pix', 'Cartão'].includes(resposta)) {
+                    const respostaPagamento = gerenciador.informarPagamento(posicao, resposta.toLowerCase());
+                    msg.reply(respostaPagamento);
+                } else {
+                    msg.reply('Método de pagamento inválido.');
+                }
+            }
+        });
+
         return;
     }
 
