@@ -154,7 +154,7 @@ class FutebolEventManager {
             // Obter os dados existentes da planilha
             const existingDataResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SHEET_ID,
-                range: `listaPagos!A:B`, // Intervalo da tabela
+                range: `listaPagos!A:C`, // Intervalo da tabela
             });
     
             const existingData = existingDataResponse.data.values || [];
@@ -164,7 +164,7 @@ class FutebolEventManager {
             .filter((pagoPor) =>
                     !existingData.some((row) => row[0] === pagoPor.nome && row[1] === pagoPor.dataPagamento)
             )
-            .map(pagoPor => [pagoPor.nome, pagoPor.dataPagamento]);
+            .map(pagoPor => [pagoPor.nome, pagoPor.tipoPagamento, pagoPor.dataPagamento]);
     
             if (newValues.length === 0) {
                 console.log("Nenhum novo pagamento para salvar.");
@@ -174,7 +174,7 @@ class FutebolEventManager {
             // Adiciona os novos pagamentos à planilha
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SHEET_ID,
-                range: `listaPagos!A:B`, // Intervalo da tabela
+                range: `listaPagos!A:C`, // Intervalo da tabela
                 valueInputOption: 'RAW',
                 resource: {
                     values: newValues, // Adiciona apenas as entradas que não são duplicadas
@@ -401,10 +401,10 @@ class FutebolEventManager {
                 });
             }
     
-            const tipos = { '1': '🔄', '2': '💵', '3': '💳' };
+            const tipos = { '1': 'pix', '2': 'dinheiro', '3': 'cartao' };
     
             const indexPrincipal = this.listaPrincipal.findIndex(jogador => jogador === nomeJogador);
-            const jogadorPagante = this.listaPrincipal[indexPrincipal] + ' => ' + tipos[tipoPagamento];
+            const jogadorPagante = this.listaPrincipal[indexPrincipal];
             const indexPgt = this.listaPagos.findIndex(
                 (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === dataPelada
             );
@@ -413,7 +413,7 @@ class FutebolEventManager {
                 return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt].nome;
             }
     
-            this.listaPagos.push({ nome: jogadorPagante, dataPagamento: dataPelada });    
+            this.listaPagos.push({ nome: jogadorPagante, tipoPagamento: tipos[tipoPagamento], dataPagamento: dataPelada });    
             this.salvarPagamentoNaPlanilha();
     
             return `Pagamento de ${nomeJogador} registrado com sucesso como ${tipoPagamento}.`;
