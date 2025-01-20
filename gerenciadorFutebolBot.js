@@ -783,8 +783,7 @@ client.on('message', async msg => {
         "/reiniciar",
         "/sortear",
         "/pg",
-        "/caixa",
-        "/ver"
+        "/caixa"
     ];
 
     if (comandosListas.includes(comando) && args[0]) {
