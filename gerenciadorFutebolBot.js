@@ -67,13 +67,13 @@ class FutebolEventManager {
                 try {
                     const response = await sheets.spreadsheets.values.get({
                         spreadsheetId: SHEET_ID,
-                        range: `${key}!A2:B`, // Ignora a primeira linha (cabeçalho)
+                        range: `${key}!A2:C`, // Ignora a primeira linha (cabeçalho)
                     });
     
                     const values = response.data.values || [];
                     data[key] = values.map(row => {
                         if (key === 'listaPagos') {
-                            return { nome: row[0], dataPagamento: row[1]}
+                            return { nome: row[0], tipoPagamento: row[1], dataPagamento: row[2]}
                         }
                         return row[0];
                     }); // Extrai o valor de cada linha
@@ -428,7 +428,6 @@ class FutebolEventManager {
             // Definir os valores iniciais
             const valorPagamento = parseFloat(TAXA_PARTICIPANTE); // Defina TAXA_PARTICIPANTE como constante ou variável
             
-            const tipos = { '1': '🔄', '2': '💵', '3': '💳' };
             nomeJogador = this.listaPrincipal[posicao - 1]; // Posição é 1-based
             const novoTotalRecebido = valorPagamento;
 
@@ -570,13 +569,13 @@ class FutebolEventManager {
             };
     
             this.listaPagos.forEach((pagoPor) => {
-                if (pagoPor.nome.includes('🔄')) {
+                if (pagoPor.tipoPagamento === 'pix') {
                     totais.pix += TAXA_PARTICIPANTE;
                 }
-                if (pagoPor.nome.includes('💵')) {
+                if (pagoPor.tipoPagamento === 'dinheiro') {
                     totais.dinheiro += TAXA_PARTICIPANTE;
                 }
-                if (pagoPor.nome.includes('💳')) {
+                if (pagoPor.tipoPagamento === 'cartao') {
                     totais.cartao += TAXA_PARTICIPANTE;
                 }
             });
