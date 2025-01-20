@@ -11,19 +11,19 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const ADMINS = process.env.ADMINS.split(',');
 const JOGADORES_FIXOS = process.env.JOGADORES_FIXOS.split(',');
 const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
 const TAXA_PARTICIPANTE = parseInt(process.env.TAXA_PARTICIPANTE);
 const TAXA_CAMPO = parseInt(process.env.TAXA_CAMPO);
 const GRUPO = process.env.GRUPO
+const FROM_ADMS = process.env.FROM_ADMS
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const SCOPES = process.env.GOOGLE_SHEET_SCOPES || "https://www.googleapis.com/auth/spreadsheets";
 
 let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
 let qrCodeData = null;
-let dataPeladaAtual = null;
+let dataPeladaAtual = process.env.DATA_PELADA_ATUAL;
 
 const orientacoes = '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
 '\n- */add* _(Para adicionar na lista principal ou espera)_' +
@@ -480,7 +480,7 @@ class FutebolEventManager {
         }
     }    
 
-    async resumoCaixa(dataAtual) {
+    async resumoCaixa(dataAtual, msgFrom = null) {
         try {
             // Carregar credenciais
             const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
@@ -529,18 +529,20 @@ class FutebolEventManager {
 
 
             // Montar a mensagem formatada para WhatsApp
-            const mensagem = `*Resumo do Caixa do Dia ${dataAtual}:*\n\n` +
+            let mensagem = `*Resumo do Caixa do Dia ${dataAtual}:*\n\n` +
                 `💲 *Pagos*:\n${listaPagosFormatada.length > 0 ? listaPagosFormatada.join('\n') : 'Nenhum'} \n` +
                 `\n🔄 *Pix*: R$ ${parseFloat(pix).toFixed(2)} \n` +
                 `💳 *Cartão*: R$ ${parseFloat(cartao).toFixed(2)} \n` +
                 `💵 *Dinheiro*: R$ ${parseFloat(dinheiro).toFixed(2)} \n` +
                 `\n🪙 *Total Recebido*: R$ ${parseFloat(totalRecebido).toFixed(2)} \n` +
                 `\n📋 *Pendentes*:\n${listaPendentesFormatada.length > 0 ? listaPendentesFormatada.join('\n') : 'Nenhum'} \n` +
-                `\n💸 *Total pendente*: R$ ${parseFloat(totalPendente).toFixed(2)} \n` +
-                `\n⚽ *Taxa Campo*: R$ ${parseFloat(taxaCampo).toFixed(2)} \n` +
-                `\n💰 *Caixa do Dia*: R$ ${parseFloat(caixaDia).toFixed(2)} \n` +
-                `\n🏦 *Fundo de Caixa*: R$ ${parseFloat(fundoCaixa).toFixed(2)} \n`
-                ;
+                `\n💸 *Total pendente*: R$ ${parseFloat(totalPendente).toFixed(2)} \n`;
+                
+                if (msgFrom === FROM_ADMS) {
+                    mensagem += `\n⚽ *Taxa Campo*: R$ ${parseFloat(taxaCampo).toFixed(2)} \n` +
+                    `\n💰 *Caixa do Dia*: R$ ${parseFloat(caixaDia).toFixed(2)} \n` +
+                    `\n🏦 *Fundo de Caixa*: R$ ${parseFloat(fundoCaixa).toFixed(2)} \n`;
+                }
     
             return mensagem;
         } catch (error) {
@@ -775,6 +777,7 @@ client.on('message', async msg => {
 
     const comandosAdmins = [
         "/addlista",
+        "/addlistag",
         "/rmp",
         "/rmpgol",
         "/limpar",
@@ -795,7 +798,7 @@ client.on('message', async msg => {
         return;
     }
 
-    if (comandosAdmins.includes(comando) && !ADMINS.includes(numero)) {
+    if (comandosAdmins.includes(comando) && FROM_ADMS !== msg.from) {
         msg.reply("Apenas administradores podem executar o comando enviado.");
         return;
     }
@@ -921,7 +924,7 @@ client.on('message', async msg => {
                     let respostaPagamento = '';
                     respostaPagamento = await gerenciador.informarPagamento(args[0], args[1] || dataPeladaAtual, resposta.toLowerCase());
                     msg.reply(respostaPagamento);
-                    const respostaCaixa = await gerenciador.resumoCaixa(args[1] || dataPeladaAtual);
+                    const respostaCaixa = await gerenciador.resumoCaixa(args[1] || dataPeladaAtual, msg.from);
                     msg.reply(respostaCaixa); 
                 }
 
@@ -941,7 +944,7 @@ client.on('message', async msg => {
     }
 
     if(comando === "/caixa") {
-        const respostaCaixa = await gerenciador.resumoCaixa(args[0] || dataPeladaAtual);
+        const respostaCaixa = await gerenciador.resumoCaixa(args[0] || dataPeladaAtual, msg.from);
         msg.reply(respostaCaixa);
         return;
     }

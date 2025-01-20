@@ -1,93 +1,90 @@
-# Futebol-Bot-WP
-
-### Comandos para Usuários Participantes
+*Comandos para Usuários Participantes*
 
 Utilize os comandos abaixo para gerenciar sua participação:
 
-- **`/add`**
+- *`/add`*
   - Adicione-se à lista principal ou de espera.
 
-- **`/rm`**
+- *`/rm`*
   - Remova-se da lista principal ou de espera.
 
-- **`/addgol`**
+- *`/addgol`*
   - Adicione-se à lista de goleiros.
 
-- **`/rmgol`**
+- *`/rmgol`*
   - Remova-se da lista de goleiros.
 
----
 
-### Comandos para Administradores do Grupo
+*Comandos para Administradores do Grupo*
 
-#### Gerenciamento de Listas
+*Gerenciamento de Listas*
 
-- **`/addlista`**
+- *`/addlista`*
   - Adicione um jogador ou uma lista de jogadores separados por vírgula.
   
-  **Exemplo:**
+  *Exemplo:*
   ```
   /addlista jogador1
   /addlista jogador1,jogador2,jogador3
   ```
 
-- **`/addlistag`**
+- *`/addlistag`*
   - Adicione um goleiro ou uma lista de goleiros separados por vírgula.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /addlistag goleiro1
   /addlistag goleiro1,goleiro2,goleiro3
   ```
 
-- **`/rmp`**
+- *`/rmp`*
   - Remova um jogador da lista principal por posição.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /rmp 12
   ```
 
-- **`/rmpgol`**
+- *`/rmpgol`*
   - Remova um goleiro da lista de goleiros por posição.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /rmpgol 1
   ```
 
-- **`/limpar`**
+- *`/limpar`*
   - Limpe todas as listas, removendo todos os jogadores.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /limpar
   ```
 
-- **`/reiniciar`**
+- *`/reiniciar`*
   - Limpe todas as listas e retorne a principal ao estado inicial com os administradores.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /reiniciar
   ```
 
-#### Sorteio de Times
+*Sorteio de Times*
 
-- **`/sortear`**
+- *`/sortear`*
   - Realize o sorteio dos times seguindo a regra: 3 times de 5 jogadores.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /sortear
   ```
 
-#### Pagamentos
+*Pagamentos*
 
-- **`/pg`**
-  - Informe o pagamento realizado por um jogador. **_(Se for uma pendência de uma pelada passada, informar a data do evento.)_**
+- *`/pg`*
+  - Informe o pagamento realizado por um jogador. *_(Se for uma pendência de uma pelada passada, informar a data do evento.)_*
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /pg 9
   /pg 9 16/01/2025
@@ -98,23 +95,23 @@ Utilize os comandos abaixo para gerenciar sua participação:
      3. Cartão
      4. Cancelar
 
-#### Caixa
+*Caixa*
 
-- **`/caixa`**
-  - Consulte o caixa de uma pelada passada ou da pelada atual. **_(Se deseja consultar o caixa de uma palada passada, informar a data do evento)_**
+- *`/caixa`*
+  - Consulte o caixa de uma pelada passada ou da pelada atual. *_(Se deseja consultar o caixa de uma palada passada, informar a data do evento)_*
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /caixa
   /caixa 16/01/2025
   ```
 
-#### Visualização de Listas
+*Visualização de Listas*
 
-- **`/ver`**
+- *`/ver`*
   - Veja todas as listas.
 
-  **Exemplo:**
+  *Exemplo:*
   ```
   /ver
   ```
