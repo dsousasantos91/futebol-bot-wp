@@ -23,7 +23,7 @@ const SCOPES = process.env.GOOGLE_SHEET_SCOPES || "https://www.googleapis.com/au
 
 let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
 let qrCodeData = null;
-let dataPeladaAtual = '23/01/2025';
+let dataPeladaAtual = null;
 
 const orientacoes = '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
 '\n- */add* _(Para adicionar na lista principal ou espera)_' +
