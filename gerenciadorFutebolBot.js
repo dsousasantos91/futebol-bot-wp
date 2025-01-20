@@ -16,12 +16,14 @@ const JOGADORES_FIXOS = process.env.JOGADORES_FIXOS.split(',');
 const ABRIR = process.env.ABRIR;
 const FECHAR = process.env.FECHAR;
 const TAXA_PARTICIPANTE = parseInt(process.env.TAXA_PARTICIPANTE);
+const TAXA_CAMPO = parseInt(process.env.TAXA_CAMPO);
 const GRUPO = process.env.GRUPO
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const SCOPES = process.env.GOOGLE_SHEET_SCOPES || "https://www.googleapis.com/auth/spreadsheets";
 
 let listaAberta = process.env.LISTA_ABERTA.toLocaleLowerCase() === 'true';
 let qrCodeData = null;
+let dataPeladaAtual = '23/01/2025';
 
 const orientacoes = '\n\nUtilize os comandos abaixo para adicionar ou remover sua participação:\n' +
 '\n- */add* _(Para adicionar na lista principal ou espera)_' +
@@ -187,17 +189,15 @@ class FutebolEventManager {
     
 
     exibirListas() {
-        let mensagem = "\nLista Pelada\nQuinta 21:40\n";
+        let mensagem = `\nLista Pelada\nQuinta ${dataPeladaAtual} 21:40\n`;
         mensagem += "\n*🥅 Goleiros:*\n";
         this.listaGoleiros
-            .filter(goleiro => goleiro !== null)
             .forEach((goleiro, index) => {
                 mensagem += `${index + 1} - ${goleiro || ""}\n`;
             });
 
         mensagem += "\n*📋 Jogadores:*\n";
         this.listaPrincipal
-            .filter(jogador => jogador !== null)    
             .forEach((jogador, index) => {
                     mensagem += `${index + 1} - ${jogador || ""}\n`;
             });
@@ -303,7 +303,7 @@ class FutebolEventManager {
         return this.exibirListas();
     }
 
-    async informarPagamentoAtrasado(posicao, dataPelada, tipoPagamento) {
+    async informarPagamento(posicao, dataPelada, tipoPagamento) {
         try {
             // Carregar credenciais
             const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
@@ -317,7 +317,7 @@ class FutebolEventManager {
             // Buscar dados da planilha
             const response = await sheets.spreadsheets.values.get({
                 spreadsheetId: SHEET_ID,
-                range: 'resumoCaixa!A2:G',
+                range: 'resumoCaixa!A2:I',
             });
     
             const rows = response.data.values;
@@ -382,17 +382,18 @@ class FutebolEventManager {
                 // Atualizar valores na planilha
                 const updatedRow = [
                     dataPelada,
-                    novoPix.toFixed(2),
-                    novoCartao.toFixed(2),
-                    novoDinheiro.toFixed(2),
-                    novoTotalRecebido.toFixed(2),
+                    novoPix,
+                    novoCartao,
+                    novoDinheiro,
+                    novoTotalRecebido,
                     listaPendentes.join(','),
-                    (parseFloat(totalPendente) - valorPagamento).toFixed(2),
+                    totalPendente - valorPagamento,
+                    parseFloat(TAXA_CAMPO)
                 ];
 
                 await sheets.spreadsheets.values.update({
                     spreadsheetId: SHEET_ID,
-                    range: `resumoCaixa!A${rowIndex + 2}:G${rowIndex + 2}`,
+                    range: `resumoCaixa!A${rowIndex + 2}:H${rowIndex + 2}`,
                     valueInputOption: 'RAW',
                     requestBody: {
                         values: [updatedRow],
@@ -405,11 +406,11 @@ class FutebolEventManager {
             const indexPrincipal = this.listaPrincipal.findIndex(jogador => jogador === nomeJogador);
             const jogadorPagante = this.listaPrincipal[indexPrincipal] + ' => ' + tipos[tipoPagamento];
             const indexPgt = this.listaPagos.findIndex(
-                (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === getDateNow()
+                (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === dataPelada
             );
             
             if(indexPgt !== -1) {
-                return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt];
+                return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt].nome;
             }
     
             this.listaPagos.push({ nome: jogadorPagante, dataPagamento: dataPelada });    
@@ -453,18 +454,19 @@ class FutebolEventManager {
             // Criar o registro para a nova linha
             const newRow = [
                 dataPelada,
-                novoPix.toFixed(2),
-                novoCartao.toFixed(2),
-                novoDinheiro.toFixed(2),
-                novoTotalRecebido.toFixed(2),
+                novoPix,
+                novoCartao,
+                novoDinheiro,
+                novoTotalRecebido,
                 listaPendentes.join(','),
-                valorPagamento.toFixed(2) * listaPendentes.length,
+                valorPagamento * listaPendentes.length,
+                parseFloat(TAXA_CAMPO)
             ];
     
             // Adicionar a nova linha à planilha
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SHEET_ID,
-                range: 'resumoCaixa!A2:G',
+                range: 'resumoCaixa!A2:H',
                 valueInputOption: 'RAW',
                 requestBody: {
                     values: [newRow],
@@ -492,7 +494,7 @@ class FutebolEventManager {
             // Buscar dados da planilha
             const response = await sheets.spreadsheets.values.get({
                 spreadsheetId: SHEET_ID,
-                range: 'resumoCaixa!A2:G',
+                range: 'resumoCaixa!A2:J',
             });
     
             const rows = response.data.values;
@@ -509,7 +511,7 @@ class FutebolEventManager {
             }
     
             // Extrair valores da linha correspondente
-            const [_, pix, cartao, dinheiro, totalRecebido, pendentes, totalPendente] = dataLinha;
+            const [_, pix, cartao, dinheiro, totalRecebido, pendentes, totalPendente, taxaCampo, caixaDia, fundoCaixa] = dataLinha;
     
             // Processar lista de pendentes
             const listaPendentes = pendentes ? pendentes.split(',').map(nome => nome.trim()) : [];
@@ -528,13 +530,17 @@ class FutebolEventManager {
 
             // Montar a mensagem formatada para WhatsApp
             const mensagem = `*Resumo do Caixa do Dia ${dataAtual}:*\n\n` +
-                `🔄 *Pix*: R$ ${parseFloat(pix).toFixed(2)} \n` +
+                `💲 *Pagos*:\n${listaPagosFormatada.length > 0 ? listaPagosFormatada.join('\n') : 'Nenhum'} \n` +
+                `\n🔄 *Pix*: R$ ${parseFloat(pix).toFixed(2)} \n` +
                 `💳 *Cartão*: R$ ${parseFloat(cartao).toFixed(2)} \n` +
                 `💵 *Dinheiro*: R$ ${parseFloat(dinheiro).toFixed(2)} \n` +
-                `\n💰 *Total Recebido*: R$ ${parseFloat(totalRecebido).toFixed(2)} \n` +
-                `\n💲 *Pagos*:\n${listaPagosFormatada.length > 0 ? listaPagosFormatada.join('\n') : 'Nenhum'} \n` +
+                `\n🪙 *Total Recebido*: R$ ${parseFloat(totalRecebido).toFixed(2)} \n` +
                 `\n📋 *Pendentes*:\n${listaPendentesFormatada.length > 0 ? listaPendentesFormatada.join('\n') : 'Nenhum'} \n` +
-                `\n💸 *Total pendente*: R$ ${parseFloat(totalPendente).toFixed(2)} \n`;
+                `\n💸 *Total pendente*: R$ ${parseFloat(totalPendente).toFixed(2)} \n` +
+                `\n⚽ *Taxa Campo*: R$ ${parseFloat(taxaCampo).toFixed(2)} \n` +
+                `\n💰 *Caixa do Dia*: R$ ${parseFloat(caixaDia).toFixed(2)} \n` +
+                `\n🏦 *Fundo de Caixa*: R$ ${parseFloat(fundoCaixa).toFixed(2)} \n`
+                ;
     
             return mensagem;
         } catch (error) {
@@ -574,7 +580,6 @@ class FutebolEventManager {
             });
     
             const totalRecebido = totais.pix + totais.dinheiro + totais.cartao;
-            const dataAtual = getDateNow(); // Formato: dd/mm/aaaa
     
             // Buscar registros existentes para a data atual
             const response = await sheets.spreadsheets.values.get({
@@ -585,17 +590,17 @@ class FutebolEventManager {
             const rows = response.data.values || [];
     
             // Verificar se já existe um registro para a data
-            const indexExistente = rows.findIndex(row => row[0] === dataAtual);
+            const indexExistente = rows.findIndex(row => row[0] === dataPeladaAtual);
     
             if (indexExistente !== -1) {
                 // Se já existe, atualizar o registro
                 await sheets.spreadsheets.values.update({
                     spreadsheetId: SHEET_ID,
-                    range: `resumoCaixa!A${indexExistente + 1}:G${indexExistente + 1}`, // Atualizar a linha correspondente
+                    range: `resumoCaixa!A${indexExistente + 1}:H${indexExistente + 1}`, // Atualizar a linha correspondente
                     valueInputOption: 'RAW',
                     resource: {
                         values: [
-                            [dataAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join('\n'), this.listaPrincipal.length * TAXA_PARTICIPANTE],
+                            [dataPeladaAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join('\n'), this.listaPrincipal.length * TAXA_PARTICIPANTE, TAXA_CAMPO],
                         ],
                     },
                 });
@@ -603,12 +608,12 @@ class FutebolEventManager {
             } else {
                 // Se não existe, adicionar um novo registro
                 const values = [
-                    [dataAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join(','), this.listaPrincipal.length * TAXA_PARTICIPANTE],
+                    [dataPeladaAtual, totais.pix, totais.dinheiro, totais.cartao, totalRecebido, this.listaPrincipal.join(','), this.listaPrincipal.length * TAXA_PARTICIPANTE, TAXA_CAMPO],
                 ];
     
                 await sheets.spreadsheets.values.append({
                     spreadsheetId: SHEET_ID,
-                    range: `resumoCaixa!A:F`, // Intervalo da tabela
+                    range: `resumoCaixa!A:H`, // Intervalo da tabela
                     valueInputOption: 'RAW',
                     resource: {
                         values: values,
@@ -722,6 +727,7 @@ client.on('ready', () => {
 
         const chat = await findGroupByName(GRUPO);
         if (chat) {
+            setDataPeladaAtual();
             gerenciador.abrirLista();
             gerenciador.reiniciarListas();
             chat.sendMessage(gerenciador.exibirListas());
@@ -913,9 +919,9 @@ client.on('message', async msg => {
                 const respostaValida = ['1', '2', '3'].includes(resposta)
                 if (respostaValida) {
                     let respostaPagamento = '';
-                    respostaPagamento = await gerenciador.informarPagamentoAtrasado(args[0], args[1] || getDateNow(), resposta.toLowerCase());
+                    respostaPagamento = await gerenciador.informarPagamento(args[0], args[1] || dataPeladaAtual, resposta.toLowerCase());
                     msg.reply(respostaPagamento);
-                    const respostaCaixa = await gerenciador.resumoCaixa(args[1] || getDateNow());
+                    const respostaCaixa = await gerenciador.resumoCaixa(args[1] || dataPeladaAtual);
                     msg.reply(respostaCaixa); 
                 }
 
@@ -935,7 +941,7 @@ client.on('message', async msg => {
     }
 
     if(comando === "/caixa") {
-        const respostaCaixa = await gerenciador.resumoCaixa(args[0] || getDateNow());
+        const respostaCaixa = await gerenciador.resumoCaixa(args[0] || dataPeladaAtual);
         msg.reply(respostaCaixa);
         return;
     }
@@ -946,8 +952,10 @@ async function findGroupByName(name) {
     return chats.find(chat => chat.name === name);
 }
 
-function getDateNow() {
-    return new Date().toLocaleDateString('pt-BR');
+function setDataPeladaAtual() {
+    const dataComTresDias = new Date(new Date());
+    dataComTresDias.setDate(dataComTresDias.getDate() + 3);
+    dataPeladaAtual = dataComTresDias.toLocaleDateString('pt-BR');    
 }
 
 client.initialize();
