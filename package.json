@@ -7,10 +7,14 @@
         "node-schedule": "^2.1.1",
         "qrcode": "^1.5.4",
         "qrcode-terminal": "^0.12.0",
-        "whatsapp-web.js": ""
+        "whatsapp-web.js": "",
+        "puppeteer": "^24.1.1"
     },
     "engines": {
         "node": "18.x"
+    },
+    "puppeteer": {
+        "cacheDirectory": "./.cache/puppeteer"
     },
     "scripts": {
         "start": "node gerenciadorFutebolBot.js"

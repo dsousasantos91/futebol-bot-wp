@@ -34,7 +34,7 @@ build/
 .yarn-integrity
 
 # Environment files
-.env
+*.env
 .env.test
 .env.*.local
 
