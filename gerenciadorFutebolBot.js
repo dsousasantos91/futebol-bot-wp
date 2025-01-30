@@ -140,50 +140,26 @@ class FutebolEventManager {
         }
     }
 
-    async salvarPagamentoNaPlanilha() {
+    async salvarPagamentoNaPlanilha(novosPagamentos) {
         try {
-            // Carregar credenciais
+            if (novosPagamentos.length === 0) return;
+            
             const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-            const auth = new google.auth.GoogleAuth({
-                credentials,
-                scopes: [SCOPES],
-            });
-    
+            const auth = new google.auth.GoogleAuth({ credentials, scopes: [SCOPES] });
             const sheets = google.sheets({ version: "v4", auth });
-    
-            // Obter os dados existentes da planilha
-            const existingDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SHEET_ID,
-                range: `listaPagos!A:C`, // Intervalo da tabela
-            });
-    
-            const existingData = existingDataResponse.data.values || [];
-    
-            // Construir os valores a partir de this.listaPagos que ainda não existem na planilha
-            const newValues = this.listaPagos
-            .filter((pagoPor) =>
-                    !existingData.some((row) => row[0] === pagoPor.nome && row[1] === pagoPor.dataPagamento)
-            )
-            .map(pagoPor => [pagoPor.nome, pagoPor.tipoPagamento, pagoPor.dataPagamento]);
-    
-            if (newValues.length === 0) {
-                console.log("Nenhum novo pagamento para salvar.");
-                return;
-            }
-    
-            // Adiciona os novos pagamentos à planilha
+            
+            const newValues = novosPagamentos.map(pagoPor => [pagoPor.nome, pagoPor.tipoPagamento, pagoPor.dataPagamento]);
+            
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SHEET_ID,
-                range: `listaPagos!A:C`, // Intervalo da tabela
+                range: `listaPagos!A:C`,
                 valueInputOption: 'RAW',
-                resource: {
-                    values: newValues, // Adiciona apenas as entradas que não são duplicadas
-                },
+                requestBody: { values: newValues },
             });
-    
-            console.log("Novos pagamentos salvos no Google Sheets com sucesso!");
+            
+            console.log("Novos pagamentos adicionados à planilha com sucesso!");
         } catch (error) {
-            console.error("Erro ao salvar lista de pagamento no Google Sheets:", error);
+            console.error("Erro ao salvar pagamento no Google Sheets:", error);
         }
     }   
     
@@ -305,121 +281,71 @@ class FutebolEventManager {
 
     async informarPagamento(posicao, dataPelada, tipoPagamento) {
         try {
-            // Carregar credenciais
             const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-            const auth = new google.auth.GoogleAuth({
-                credentials,
-                scopes: [SCOPES],
-            });
-    
+            const auth = new google.auth.GoogleAuth({ credentials, scopes: [SCOPES] });
             const sheets = google.sheets({ version: "v4", auth });
     
-            // Buscar dados da planilha
             const response = await sheets.spreadsheets.values.get({
                 spreadsheetId: SHEET_ID,
                 range: 'resumoCaixa!A2:I',
             });
-    
+            
             const rows = response.data.values;
+            if (!rows || rows.length === 0) return 'Nenhuma informação encontrada na planilha.';
     
-            if (!rows || rows.length === 0) {
-                return 'Nenhuma informação encontrada na planilha.';
-            }
-    
-            // Encontrar a linha correspondente à data
             const rowIndex = rows.findIndex(row => row[0] === dataPelada);
+            let nomeJogador = '<vazio>';
     
-            let nomeJogador = '<vazio>'
-
-            // Se a linha não existir, vamos criar uma nova linha no final
             if (rowIndex === -1) {
                 nomeJogador = await this.registrarNovaDataPagamento(posicao, dataPelada, tipoPagamento, sheets, nomeJogador);
             }
     
             if (rowIndex !== -1) {
-                // Extrair a linha correspondente
                 const dataLinha = rows[rowIndex];
-                const [_, pix, cartao, dinheiro, totalRecebido, pendentes, totalPendente] = dataLinha;
-        
-                // Processar a lista de pendentes
+                let [_, pix, cartao, dinheiro, totalRecebido, pendentes, totalPendente] = dataLinha;
+    
                 let listaPendentes = pendentes ? pendentes.split(',').map(nome => nome.trim()) : [];
-        
-                // Verificar se a posição está dentro do limite da lista de pendentes
                 if (posicao < 1 || posicao > listaPendentes.length) {
                     return `Posição inválida. A lista de pendentes tem apenas ${listaPendentes.length} jogadores.`;
                 }
-        
-                // Obter o nome do jogador pela posição
-                nomeJogador = listaPendentes[posicao - 1]; // Posição é 1-based, então subtraímos 1
-        
-                // Remover o jogador da lista de pendentes
-                listaPendentes = listaPendentes.filter((jogador, index) => index !== (posicao - 1));
-        
-                // Atualizar o valor do tipo de pagamento
-                const valorPagamento = parseFloat(TAXA_PARTICIPANTE); // Defina TAXA_PARTICIPANTE como constante ou variável
+                
+                nomeJogador = listaPendentes.splice(posicao - 1, 1)[0];
+                
+                const valorPagamento = parseFloat(TAXA_PARTICIPANTE);
                 let novoPix = parseFloat(pix);
                 let novoCartao = parseFloat(cartao);
                 let novoDinheiro = parseFloat(dinheiro);
-                let novoTotalRecebido = parseFloat(totalRecebido);
-        
+                let novoTotalRecebido = parseFloat(totalRecebido) + valorPagamento;
+    
                 switch (tipoPagamento.toLowerCase()) {
-                    case '1':
-                        novoPix += valorPagamento;
-                        break;
-                    case '2':
-                        novoDinheiro += valorPagamento;
-                        break;
-                    case '3':
-                        novoCartao += valorPagamento;
-                        break;
-                    default:
-                        return 'Método de pagamento inválido. Use "1 (pix)", "2 (dinheiro)" ou "3 (cartao)".';
+                    case '1': novoPix += valorPagamento; break;
+                    case '2': novoDinheiro += valorPagamento; break;
+                    case '3': novoCartao += valorPagamento; break;
+                    default: return 'Método de pagamento inválido. Use "1 (pix)", "2 (dinheiro)" ou "3 (cartao)".';
                 }
-        
-                // Atualizar o total recebido
-                novoTotalRecebido += valorPagamento;
-        
-                // Atualizar valores na planilha
+    
                 const updatedRow = [
-                    dataPelada,
-                    novoPix,
-                    novoCartao,
-                    novoDinheiro,
-                    novoTotalRecebido,
-                    listaPendentes.join(','),
-                    totalPendente - valorPagamento,
-                    parseFloat(TAXA_CAMPO)
+                    dataPelada, novoPix, novoCartao, novoDinheiro, novoTotalRecebido,
+                    listaPendentes.join(','), totalPendente - valorPagamento, parseFloat(TAXA_CAMPO)
                 ];
-
+                
                 await sheets.spreadsheets.values.update({
                     spreadsheetId: SHEET_ID,
                     range: `resumoCaixa!A${rowIndex + 2}:H${rowIndex + 2}`,
                     valueInputOption: 'RAW',
-                    requestBody: {
-                        values: [updatedRow],
-                    },
+                    requestBody: { values: [updatedRow] },
                 });
             }
     
             const tipos = { '1': 'pix', '2': 'dinheiro', '3': 'cartao' };
-    
-            const indexPrincipal = this.listaPrincipal.findIndex(jogador => jogador === nomeJogador);
-            const jogadorPagante = this.listaPrincipal[indexPrincipal];
-            const indexPgt = this.listaPagos.findIndex(
-                (pagoPor) => jogadorPagante.includes(pagoPor.nome) && pagoPor.dataPagamento === dataPelada
-            );
-            
-            if(indexPgt !== -1) {
-                return "\nPagamento já informado para o jogador " + this.listaPagos[indexPgt].nome;
-            }
-    
-            this.listaPagos.push({ nome: jogadorPagante, tipoPagamento: tipos[tipoPagamento], dataPagamento: dataPelada });    
-            this.salvarPagamentoNaPlanilha();
+            this.listaPagos.push({ nome: nomeJogador, tipoPagamento: tipos[tipoPagamento], dataPagamento: dataPelada });
+            const novoPagante = this.listaPagos[this.listaPagos.length - 1];
+            await this.salvarPagamentoNaPlanilha([novoPagante]);
     
             return `Pagamento de ${nomeJogador} registrado com sucesso como ${tipoPagamento}.`;
         } catch (error) {
-            console.error('Erro ao registrar pagamento atrasado:', error);
-            return 'Erro ao registrar pagamento atrasado na planilha.';
+            console.error('Erro ao registrar pagamento:', error);
+            return 'Erro ao registrar pagamento na planilha.';
         }
     }
     
