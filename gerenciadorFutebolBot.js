@@ -697,7 +697,8 @@ client.on('message', async msg => {
         "/add",
         "/rm",
         "/addgol",
-        "/rmgol"
+        "/rmgol",
+        "/usuario"
     ];
 
     const comandosAdmins = [
@@ -724,6 +725,11 @@ client.on('message', async msg => {
 
     if (comandosAdmins.includes(comando) && FROM_ADMS !== msg.from) {
         msg.reply("Apenas administradores podem executar o comando enviado.");
+        return;
+    }
+
+    if(comando === "/usuario") {
+        msg.reply(`${nomeUsuario} (${numero})`);
         return;
     }
 
